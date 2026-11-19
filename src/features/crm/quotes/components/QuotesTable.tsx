@@ -207,16 +207,16 @@ export function QuotesTable({
                     <ProjectLinkAction row={row} compact />
                     <ChantierHandoffAction row={row} actions={actions} compact />
                     <QuoteEditAction row={row} compact />
-                    <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Envoyer</button>
-                    <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Relancer</button>
+                    {!isExternalObatQuote(row) && <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Envoyer</button>}
+                    {!isExternalObatQuote(row) && <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Relancer</button>}
                     <details className="relative">
                       <summary className="flex cursor-pointer list-none items-center rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">
                         <MoreHorizontal className="h-3.5 w-3.5" />
                       </summary>
                       <div className="absolute right-0 z-20 mt-1 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
                         <button type="button" onClick={() => actions.onPdf(row)} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">PDF</button>
-                        <button type="button" onClick={() => actions.onStatus(row, "accepte")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Accepter</button>
-                        <button type="button" onClick={() => actions.onStatus(row, "refuse")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50">Refuser</button>
+                        {!isExternalObatQuote(row) && <button type="button" onClick={() => actions.onStatus(row, "accepte")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Accepter</button>}
+                        {!isExternalObatQuote(row) && <button type="button" onClick={() => actions.onStatus(row, "refuse")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50">Refuser</button>}
                         {row.chantierPath ? (
                           <Link to={row.chantierPath} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Ouvrir chantier</Link>
                         ) : needsChantierHandoff(row) ? (
