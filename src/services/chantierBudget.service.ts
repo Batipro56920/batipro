@@ -7,6 +7,7 @@ import { listChantierPurchaseRequests, type ChantierPurchaseRequestRow } from ".
 import { listIntervenants } from "./intervenants.service";
 import { configuredWorkerRates, sumLaborValues, valueLaborEntry } from "./laborCostValuation.service";
 import { getChantierMaterialCost } from "./productStock.service";
+import { getCompanyHourlyRates } from "./indirectCosts.service";
 
 export type ChantierBudgetSettingsRow = {
   chantier_id: string;
@@ -55,6 +56,8 @@ export type ChantierBudgetDashboard = {
   chiffreAffairesPrevuHt: number;
   coutMoPrevuHt: number;
   coutMoReelHt: number;
+  coutMoReelIndirectHt: number | null;
+  coutMoReelCompletHt: number | null;
   achatsPrevusHt: number;
   achatsReelsHt: number;
   achatsSaisisHt: number;
@@ -295,7 +298,7 @@ export async function listChantierLaborCostSummaries(
 export async function loadChantierBudgetDashboard(chantierId: string): Promise<ChantierBudgetDashboard> {
   if (!chantierId) throw new Error("chantierId manquant.");
 
-  const [settingsResult, devis, tasks, timeEntries, purchaseResult, changeOrdersResult, materialCostHt, intervenants] = await Promise.all([
+  const [settingsResult, devis, tasks, timeEntries, purchaseResult, changeOrdersResult, materialCostHt, intervenants, companyRates] = await Promise.all([
     getBudgetSettings(chantierId),
     listDevisByChantier(chantierId),
     getTasksByChantierId(chantierId),
@@ -304,6 +307,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     listChantierChangeOrders(chantierId),
     getChantierMaterialCost(chantierId),
     listIntervenants(),
+    getCompanyHourlyRates().catch(() => null),
   ]);
 
   const devisLignesGroups = await Promise.all(devis.map((row) => listDevisLignes(row.id)));
@@ -321,6 +325,8 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   const taskLaborMap = new Map<string, ChantierBudgetTaskRow>();
   const individualRateById = configuredWorkerRates(intervenants);
   let hoursUsingChantierRate = 0;
+  let employeeHours = 0;
+  const employeeIds = new Set(intervenants.filter((person) => person.status === "employee").map((person) => person.id));
 
   function ensureLot(lot: string): ChantierBudgetLotRow {
     const normalizedLot = String(lot || "Sans lot").trim() || "Sans lot";
@@ -378,6 +384,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     currentTask.actualLaborCostHt += valuation.laborCostHt;
     taskLaborMap.set(key, currentTask);
     hoursUsingChantierRate += valuation.hoursUsingChantierRate;
+    if (employeeIds.has(entry.intervenant_id)) employeeHours += valuation.hours;
   });
 
   purchaseResult.requests.forEach((request) => {
@@ -406,6 +413,12 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   const chiffreAffairesPrevuHt = chiffreAffairesBaseHt + avenantsValidesHt;
   const coutMoPrevuHt = lots.reduce((sum, row) => sum + row.cout_mo_prevu_ht, 0);
   const coutMoReelHt = lots.reduce((sum, row) => sum + row.cout_mo_reel_ht, 0);
+  // Coût complet indicatif, séparé du déboursé direct utilisé dans les marges
+  // existantes. Ne jamais ajouter ces frais une seconde fois au coût des tâches.
+  const coutMoReelIndirectHt = companyRates
+    ? employeeHours * (companyRates.overheadRatePerHour + companyRates.amortizationRatePerHour)
+    : null;
+  const coutMoReelCompletHt = coutMoReelIndirectHt === null ? null : coutMoReelHt + coutMoReelIndirectHt;
   const achatsPrevusHt = lots.reduce((sum, row) => sum + row.achats_prevus_ht, 0);
   const achatsSaisisHt = lots.reduce((sum, row) => sum + row.achats_reels_ht, 0);
   // Les bons de livraison lus sur le terrain s'ajoutent aux achats saisis au
@@ -440,6 +453,8 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     chiffreAffairesPrevuHt,
     coutMoPrevuHt,
     coutMoReelHt,
+    coutMoReelIndirectHt,
+    coutMoReelCompletHt,
     achatsPrevusHt,
     achatsReelsHt,
     achatsSaisisHt,
