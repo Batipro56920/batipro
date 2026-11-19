@@ -204,18 +204,31 @@ export async function listChantierLaborCostSummaries(
   const ids = Array.from(new Set(chantierIds.filter(Boolean)));
   if (!ids.length) return [];
 
-  let timeQuery = (supabase as any)
-    .from("chantier_time_entries")
-    .select("chantier_id,intervenant_id,duration_hours,work_date,hourly_cost_snapshot_ht")
-    .in("chantier_id", ids);
-  if (period.from) timeQuery = timeQuery.gte("work_date", period.from);
-  if (period.to) timeQuery = timeQuery.lte("work_date", period.to);
+  const fetchTimeEntries = async (withSnapshot: boolean) => {
+    let query = (supabase as any)
+      .from("chantier_time_entries")
+      .select(withSnapshot
+        ? "chantier_id,intervenant_id,duration_hours,work_date,hourly_cost_snapshot_ht"
+        : "chantier_id,intervenant_id,duration_hours,work_date")
+      .in("chantier_id", ids);
+    if (period.from) query = query.gte("work_date", period.from);
+    if (period.to) query = query.lte("work_date", period.to);
+    return query;
+  };
+  const loadTimeRows = async () => {
+    const latest = await fetchTimeEntries(true);
+    if (!latest.error) return latest;
+    const errorText = String(latest.error.message ?? "").toLowerCase();
+    if (!["hourly_cost_snapshot_ht", "42703"].some((token) => errorText.includes(token))
+        && latest.error.code !== "42703") return latest;
+    return fetchTimeEntries(false);
+  };
 
   const [settingsResult, timeResult, intervenants] = await Promise.all([
     fromBudgetSettings()
       .select("chantier_id,taux_horaire_mo_ht")
       .in("chantier_id", ids),
-    timeQuery,
+    loadTimeRows(),
     listIntervenants(),
   ]);
 
