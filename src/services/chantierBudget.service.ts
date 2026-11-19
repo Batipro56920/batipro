@@ -222,7 +222,7 @@ export async function listChantierLaborCostSummaries(
     let query = (supabase as any)
       .from("chantier_time_entries")
       .select(withSnapshot
-        ? "chantier_id,intervenant_id,duration_hours,work_date,hourly_cost_snapshot_ht"
+        ? "chantier_id,intervenant_id,duration_hours,work_date,hourly_cost_snapshot_ht,hourly_cost_snapshot_source"
         : "chantier_id,intervenant_id,duration_hours,work_date")
       .in("chantier_id", ids);
     if (period.from) query = query.gte("work_date", period.from);
@@ -273,6 +273,7 @@ export async function listChantierLaborCostSummaries(
       intervenant_id: String(row.intervenant_id ?? ""),
       duration_hours: normalizeNumber(row.duration_hours),
       hourly_cost_snapshot_ht: row.hourly_cost_snapshot_ht,
+      hourly_cost_snapshot_source: row.hourly_cost_snapshot_source,
     }, individualRateById, chantierRate);
     const values = totalsByChantierId.get(chantierId) ?? [];
     values.push(cost);
@@ -373,6 +374,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
       intervenant_id: entry.intervenant_id,
       duration_hours: entry.duration_hours,
       hourly_cost_snapshot_ht: entry.hourly_cost_snapshot_ht,
+      hourly_cost_snapshot_source: entry.hourly_cost_snapshot_source,
     }, individualRateById, settings.taux_horaire_mo_ht);
     lotRow.cout_mo_reel_ht += valuation.laborCostHt;
     const key = task?.id ?? "__unassigned__";
