@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import SubcontractorCompliancePanel from "../components/intervenants/SubcontractorCompliancePanel";
-import IntervenantFormFields, {
+import IntervenantFormFields from "../components/intervenants/IntervenantFormFields";
+import {
   EMPTY_INTERVENANT_FORM,
   intervenantFormFromRow,
   intervenantPayload,
   type IntervenantFormState,
-} from "../components/intervenants/IntervenantFormFields";
+} from "../components/intervenants/intervenantFormModel";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
 import {
   archiveIntervenant,
