@@ -33,15 +33,15 @@ begin
   end;
   if not failed then raise exception 'Expected reactivation conflict'; end if;
 
-  -- Direct writes to office assignments cannot bypass the RPC conflict guard.
+  -- Direct writes cannot double-book workers even when bypassing the office RPC.
   failed := false;
   begin
     insert into public.office_planning_assignments(organization_id,chantier_id,intervenant_id,date_start,date_end)
       values(org,b,w1,'2026-11-10','2026-11-10');
   exception when raise_exception then
-    if sqlerrm = 'worker_task_on_other_chantier' then failed := true; else raise; end if;
+    if sqlerrm = 'worker_already_booked' then failed := true; else raise; end if;
   end;
-  if not failed then raise exception 'Expected direct office assignment conflict'; end if;
+  if not failed then raise exception 'Expected direct office double-booking conflict'; end if;
 
   -- The office RPC must also reject existing tasks on another chantier.
   insert into public.chantier_task_segments(chantier_id,intervenant_id,start_date,duration_days,status)
@@ -53,6 +53,17 @@ begin
     if sqlerrm = 'worker_task_on_other_chantier' then failed := true; else raise; end if;
   end;
   if not failed then raise exception 'Expected office RPC conflict'; end if;
+
+  -- Direct insert must also respect segments on other sites (without existing
+  -- office allocations for this worker on that date).
+  failed := false;
+  begin
+    insert into public.office_planning_assignments(organization_id,chantier_id,intervenant_id,date_start,date_end)
+      values(org,a,w2,'2026-11-12','2026-11-12');
+  exception when raise_exception then
+    if sqlerrm = 'worker_task_on_other_chantier' then failed := true; else raise; end if;
+  end;
+  if not failed then raise exception 'Expected direct office-task conflict'; end if;
 
   -- Planning on the same chantier is allowed.
   perform public.office_planning_save(null::uuid,b,w2,'2026-11-12','2026-11-12','{}'::text[]);
