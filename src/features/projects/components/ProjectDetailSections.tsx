@@ -688,7 +688,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
                             <Link to={chantierPreparationPath(quoteChantierId)} className="inline-flex h-8 items-center rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
                               Préparer
                             </Link>
-                          ) : quote.statut === "accepte" ? (
+                          ) : !external && quote.statut === "accepte" ? (
                             <button
                               type="button"
                               onClick={() => void createChantierFromQuote(quote.id)}
