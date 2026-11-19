@@ -1,0 +1,57 @@
+name: Security and financial statistics checks
+on:
+  push:
+    branches: [fix/security-finance-audit-20261119]
+  pull_request:
+    paths:
+      - "src/services/statistiques.service.ts"
+      - "src/lib/statistiques.ts"
+      - "src/components/statistics/StatisticsPageContent.tsx"
+      - "supabase/migrations/20261119160000_task_time_totals_invoker_security.sql"
+      - "tests/security-finance/**"
+      - ".github/workflows/security-finance-checks.yml"
+permissions:
+  contents: read
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx eslint src/services/statistiques.service.ts src/lib/statistiques.ts src/components/statistics/StatisticsPageContent.tsx
+  sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: tests
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tests"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: test_password
+      PGDATABASE: tests
+      PGPORT: 5432
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: psql -v ON_ERROR_STOP=1 -f tests/security-finance/fixture.sql
+      - run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261119160000_task_time_totals_invoker_security.sql
+      - run: psql -v ON_ERROR_STOP=1 -f tests/security-finance/checks.sql
