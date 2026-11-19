@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { IntervenantStatus } from "../../services/intervenants.service";
 import { EXTERNAL_WORKING_HOURS_PER_DAY, effectiveIntervenantHourlyCost } from "../../services/intervenantCosts.service";
 import { INTERVENANT_STATUS_LABELS, moneyFr, parseHourlyValue, type IntervenantFormState } from "./intervenantFormModel";
 
