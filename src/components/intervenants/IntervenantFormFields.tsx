@@ -202,7 +202,7 @@ export default function IntervenantFormFields({
         {numericInput("hourly_sale_price_ht", "Prix de vente horaire")}
         <div className="md:col-span-2"><SalaryEstimator key={form.status} hourlyCost={form.hourly_cost_ht} onHourlyCostChange={(value) => update("hourly_cost_ht", value)} /></div>
       </div> : external ? <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {numericInput("daily_rate_ht", "Tarif d'achat journalier HT", "Base de conversion indicative : ${EXTERNAL_WORKING_HOURS_PER_DAY} heures par jour.")}
+        {numericInput("daily_rate_ht", "Tarif d'achat journalier HT", `Base de conversion indicative : ${EXTERNAL_WORKING_HOURS_PER_DAY} heures par jour.`)}
         {numericInput("hourly_cost_ht", "Coût horaire d'achat HT (facultatif)", "Prioritaire sur le tarif journalier lorsqu'il est renseigné.")}
         {form.status === "subcontractor" ? <label className="block text-sm font-medium text-slate-700 md:col-span-2">Assurance / références
           <input className={inputClass} value={form.insurance} placeholder="RC pro, décennale..."
@@ -211,7 +211,7 @@ export default function IntervenantFormFields({
       </div> : <p className="mt-3 text-sm text-slate-600">Aucun coût de main-d'œuvre obligatoire pour ce type de profil.</p>}
       {(employee || external) && <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-sky-100 bg-white p-4">
         <div><div className="text-xs text-slate-500">Coût horaire de référence</div><strong className="text-xl text-slate-950">{moneyFr(hourly ?? inferredHour)}</strong></div>
-        {inferredHour !== null && <span className="text-xs text-slate-500">Calculé à partir du tarif journalier (7 h)</span>}
+        {inferredHour !== null && <span className="text-xs text-slate-500">Calculé à partir du tarif journalier (7 h de référence)</span>}
         {hourly == null && inferredHour == null && <span className="text-xs text-amber-700">À renseigner pour fiabiliser les coûts réels.</span>}
       </div>}
     </section>
