@@ -1,5 +1,6 @@
 import type { CompanyHourlyRates } from "./indirectCosts.service";
 import { equipmentTaskAmounts } from "./companySettings.service";
+import { quoteAverageLaborHourlyCost } from "./quoteAverageLaborRate";
 import type { TaskTemplateRow } from "./taskLibrary.service";
 import type { TaskTemplateEquipmentItemRow, TaskTemplateMaterialRatioRow } from "./taskTemplatePreparation.service";
 
@@ -47,9 +48,10 @@ export function taskTemplateUnitCost(
   equipment: TaskTemplateEquipmentItemRow[] = [],
 ): TaskCostBasis {
   if (!template) return EMPTY_TASK_COST;
-  // Le coût horaire propre à la tâche prime : un geste confié à un compagnon
-  // qualifié ne se chiffre pas au coût moyen de l'équipe.
-  const baseHourlyCostHt = Number(template.labor_hourly_cost_ht ?? rates?.averageEmployeeHourlyCostHt ?? 0);
+  // Les devis utilisent toujours le coût moyen des salariés productifs.
+  // L'ancien tarif personnalisé des modèles est ignoré dans le chiffrage ;
+  // la valorisation individuelle est réservée aux heures réellement pointées.
+  const baseHourlyCostHt = quoteAverageLaborHourlyCost(rates?.averageEmployeeHourlyCostHt);
   const overheadPerHour = Number(rates?.amortizationRatePerHour ?? 0) + Number(rates?.overheadRatePerHour ?? 0);
   const hours = Number(template.temps_prevu_par_unite_h ?? 0);
   const indirectHt = hours * overheadPerHour;
