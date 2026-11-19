@@ -244,11 +244,11 @@ export default function IntervenantDetailPage() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={saving || !!row.user_id}
+            disabled={saving || !!row.user_id || !form.email.trim()}
             onClick={onInvite}
             className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
           >
-            {row.invitation_last_sent_at ? "Renvoyer invitation" : "Envoyer invitation compte"}
+            {row.invitation_last_sent_at ? "Renvoyer l’invitation" : "Créer l’accès au portail"}
           </button>
           <button
             type="button"
@@ -277,8 +277,9 @@ export default function IntervenantDetailPage() {
 
         <aside className="space-y-4">
           <section className="rounded-2xl border bg-white p-5">
-            <div className="text-sm font-semibold text-slate-900">Statut compte</div>
-            <div className="mt-3 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+            <div className="text-sm font-semibold text-slate-900">Accès au portail terrain</div>
+            <p className="mt-2 text-xs text-slate-500">La fiche intervenant existe indépendamment du compte. Une adresse e-mail est nécessaire pour envoyer l’invitation ; les droits se règlent après liaison du compte.</p>
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
               {row.archived_at ? "Archivé" : row.user_id ? "Compte créé / actif" : row.invitation_last_sent_at ? "Invitation envoyée" : "Non invité"}
             </div>
             {row.invitation_last_sent_at ? (
@@ -290,7 +291,7 @@ export default function IntervenantDetailPage() {
 
           <section className="rounded-2xl border bg-white p-5">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-slate-900">Profil type</div>
+              <div className="text-sm font-semibold text-slate-900">Droits du portail</div>
               {permissionsResult?.permissionPresetId ? (
                 <button
                   type="button"
