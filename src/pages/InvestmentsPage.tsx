@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { investmentMonthlyQuoteOverhead, investmentQuoteHourlyRate } from "../services/investmentQuoteAllocation";
 import { Building2, CalendarDays, CirclePause, Landmark, Pencil, Plus, Save, Target, Trash2, X } from "lucide-react";
 import { FinancialNavigation } from "../features/financial/components/FinancialNavigation";
 import {
@@ -9,6 +10,7 @@ import {
   type CompanyInvestmentCategory,
   type CompanyInvestmentEntry,
 } from "../services/companySettings.service";
+import { getCompanyHourlyRates, type CompanyHourlyRates } from "../services/indirectCosts.service";
 
 const CATEGORIES: Array<{ value: CompanyInvestmentCategory; label: string }> = [
   { value: "materiel", label: "Matériel" },
@@ -33,11 +35,13 @@ function createInvestment(): CompanyInvestmentEntry {
     startDate: new Date().toISOString().slice(0, 10),
     notes: "",
     status: "planned",
+    quoteAllocation: "reserve",
   };
 }
 
 export default function InvestmentsPage() {
   const [entries, setEntries] = useState<CompanyInvestmentEntry[]>([]);
+  const [hourlyRates, setHourlyRates] = useState<CompanyHourlyRates | null>(null);
   const [form, setForm] = useState<CompanyInvestmentEntry>(() => createInvestment());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -53,6 +57,7 @@ export default function InvestmentsPage() {
     try {
       const settings = await getCompanySettings();
       setEntries(settings.investment_plan?.entries ?? []);
+      setHourlyRates(await getCompanyHourlyRates());
     } catch (err: any) {
       setError(err?.message ?? "Impossible de charger le plan d'investissement.");
     } finally {
@@ -64,6 +69,10 @@ export default function InvestmentsPage() {
 
   const active = useMemo(() => entries.filter((entry) => entry.status === "planned"), [entries]);
   const monthlyTotal = getInvestmentMonthlyTotal(entries);
+  const quoteMonthly = investmentMonthlyQuoteOverhead(entries);
+  const hoursPerWorker = hourlyRates?.productiveHoursPerEmployeeYear ?? 1607;
+  const productiveWorkers = hourlyRates?.productiveEmployeeCount ?? 0;
+  const quoteHourly = investmentQuoteHourlyRate(quoteMonthly, productiveWorkers, hoursPerWorker);
   const targetTotal = active.reduce((sum, entry) => sum + entry.targetAmountHt, 0);
   const filtered = filter === "all" ? entries : entries.filter((entry) => entry.category === filter);
   const next = [...active].sort((a, b) => targetDate(a).getTime() - targetDate(b).getTime())[0];
@@ -90,6 +99,7 @@ export default function InvestmentsPage() {
     try {
       const saved = await upsertCompanySettings({ investment_plan: { entries: next } });
       setEntries(saved.investment_plan?.entries ?? []);
+      setHourlyRates(await getCompanyHourlyRates());
       setDrawerOpen(false);
       setNotice(message);
     } catch (err: any) {
@@ -131,13 +141,21 @@ export default function InvestmentsPage() {
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Metric icon={<Target />} label="Objectifs actifs" value={String(active.length)} hint="Investissements à financer" />
         <Metric icon={<Landmark />} label="Budget visé" value={formatCurrency(targetTotal)} hint="Total HT des objectifs actifs" />
-        <Metric icon={<CalendarDays />} label="Effort mensuel" value={formatCurrency(monthlyTotal)} hint="Ajouté aux charges prévisionnelles" accent />
+        <Metric icon={<CalendarDays />} label="Effort mensuel" value={formatCurrency(monthlyTotal)} hint="Objectif de financement, hors devis par défaut" accent />
         <Metric icon={<Building2 />} label="Prochaine échéance" value={next ? formatMonth(targetDate(next)) : "—"} hint={next?.name ?? "Aucun objectif actif"} />
       </section>
 
-      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-        <strong>À savoir :</strong> cette mensualité est une réserve de pilotage pour financer vos objectifs. Elle est incluse dans les charges prévisionnelles et le seuil de rentabilité, sans être présentée comme une écriture comptable réelle.
-      </div>
+      <section className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
+        <h2 className="font-semibold">Répartition des investissements dans les devis</h2>
+        <p className="mt-1">Seules les charges complémentaires explicitement classées « Intégrer aux devis » alimentent les frais indirects, durant leur période active. Les réserves de trésorerie, remboursements de capital et achats déjà amortis dans Matériels n'y sont pas ajoutés.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+          <Value label="Charges à imputer ce mois" value={formatCurrency(quoteMonthly)} />
+          <Value label="Salariés productifs" value={String(productiveWorkers)} />
+          <Value label="Supplément par heure/ouvrier" value={productiveWorkers ? formatPreciseCurrency(quoteHourly) : "—"} />
+          <Value label="Supplément par jour de 7 h" value={productiveWorkers ? formatPreciseCurrency(quoteHourly * 7) : "—"} />
+        </div>
+        <p className="mt-2 text-xs text-blue-800">Les heures productives et l'effectif sont recalculés à partir des paramètres entreprise et de Profils &amp; accès.</p>
+      </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
@@ -155,6 +173,7 @@ export default function InvestmentsPage() {
               <div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{categoryLabel(entry.category)}</span><Status status={entry.status} /></div><h3 className="mt-3 text-lg font-bold text-slate-950">{entry.name}</h3></div>
               <div className="flex gap-1"><IconButton label="Modifier" onClick={() => openEdit(entry)}><Pencil /></IconButton><IconButton label="Supprimer" danger onClick={() => void persist(entries.filter((item) => item.id !== entry.id), "Investissement supprimé.")}><Trash2 /></IconButton></div>
             </div>
+            <p className={`mt-3 text-xs font-medium ${entry.quoteAllocation === "overhead" ? "text-blue-700" : "text-slate-500"}`}>{entry.quoteAllocation === "overhead" ? "Charge complémentaire à répartir dans les devis" : "Réserve financière hors coût de revient"}</p>
             <div className="mt-5 grid grid-cols-3 gap-3 border-y border-slate-100 py-4 text-sm"><Value label="Objectif" value={formatCurrency(entry.targetAmountHt)} /><Value label="Durée" value={`${entry.durationMonths} mois`} /><Value label="Mensualité" value={formatCurrency(investmentMonthlyContribution(entry))} strong /></div>
             <div className="mt-4 flex items-center justify-between text-sm"><span className="text-slate-500">Acquisition visée</span><span className="font-semibold text-slate-800">{formatMonth(targetDate(entry))}</span></div>
             {entry.notes ? <p className="mt-3 line-clamp-2 text-sm text-slate-500">{entry.notes}</p> : null}
@@ -169,6 +188,13 @@ export default function InvestmentsPage() {
           <Field label="Catégorie"><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as CompanyInvestmentCategory })} className={INPUT_CLASS}>{CATEGORIES.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></Field>
           <div className="grid gap-4 sm:grid-cols-2"><Field label="Budget cible HT"><input type="number" min="0" step="0.01" value={form.targetAmountHt || ""} onChange={(e) => setForm({ ...form, targetAmountHt: Number(e.target.value) })} className={INPUT_CLASS} /></Field><Field label="Durée souhaitée (mois)"><input type="number" min="1" step="1" value={form.durationMonths} onChange={(e) => setForm({ ...form, durationMonths: Number(e.target.value) })} className={INPUT_CLASS} /></Field></div>
           <Field label="Début du financement"><input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className={INPUT_CLASS} /></Field>
+          <Field label="Utilisation dans le coût des devis">
+            <select value={form.quoteAllocation ?? "reserve"} onChange={(event) => setForm({ ...form, quoteAllocation: event.target.value as "reserve" | "overhead" })} className={INPUT_CLASS}>
+              <option value="reserve">Réserve / objectif de financement — hors devis</option>
+              <option value="overhead">Charge complémentaire réelle — intégrer aux devis</option>
+            </select>
+            <span className="mt-2 block text-xs text-amber-800">Ne choisissez « intégrer » que si cette charge n'est pas déjà dans Charges fixes ou Matériels. Une réserve de trésorerie et le remboursement d'un capital emprunté ne sont pas des charges.</span>
+          </Field>
           <Field label="Statut"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as CompanyInvestmentEntry["status"] })} className={INPUT_CLASS}><option value="planned">À financer</option><option value="paused">En pause</option><option value="acquired">Acquis</option></select></Field>
           <Field label="Notes"><textarea rows={4} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Contexte, modèle envisagé, fournisseur..." className={`${INPUT_CLASS} h-auto resize-none py-3`} /></Field>
           <div className="rounded-2xl bg-slate-950 p-4 text-white"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Effort mensuel calculé</div><div className="mt-2 text-3xl font-bold">{formatCurrency(investmentMonthlyContribution({ ...form, status: "planned" }))}</div><div className="mt-1 text-sm text-slate-300">sur {Math.max(1, form.durationMonths || 1)} mois</div></div>
@@ -180,6 +206,7 @@ export default function InvestmentsPage() {
 }
 
 function targetDate(entry: CompanyInvestmentEntry) { const date = new Date(`${entry.startDate}T12:00:00`); date.setMonth(date.getMonth() + entry.durationMonths); return date; }
+function formatPreciseCurrency(value: number) { return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value || 0); }
 function formatCurrency(value: number) { return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value || 0); }
 function formatMonth(value: Date) { return new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(value); }
 function categoryLabel(value: CompanyInvestmentCategory) { return CATEGORIES.find((item) => item.value === value)?.label ?? "Autre"; }

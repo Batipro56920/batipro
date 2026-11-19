@@ -1,11 +1,11 @@
 import { supabase } from "../lib/supabaseClient";
+import { investmentMonthlyQuoteOverhead, investmentQuoteHourlyRate } from "../services/investmentQuoteAllocation";
 // La marge par defaut vit dans la base de chiffrage : la redefinir ici la ferait
 // deriver des le premier changement.
 import { DEFAULT_QUOTE_MARGIN_RATE } from "./taskCostBasis";
 import {
   getCompanySettings,
   normalizeIndirectCosts,
-  getInvestmentMonthlyTotal,
   type CompanyChargeEntry,
   type CompanyEquipmentAsset,
 } from "./companySettings.service";
@@ -32,6 +32,9 @@ export type CompanyHourlyRates = {
   amortizationRatePerHour: number;
   overheadAnnualHt: number;
   overheadRatePerHour: number;
+  /** Only explicitly allocated non-duplicated investment costs, not cash reserves. */
+  investmentQuoteMonthlyHt: number;
+  investmentQuoteRatePerHour: number;
   equipmentAssets: CompanyEquipmentAsset[];
   /** Marge par défaut de l'entreprise, appliquée faute de taux propre à la tâche. */
   defaultMarginRate: number;
@@ -123,8 +126,9 @@ export async function getCompanyHourlyRates(): Promise<CompanyHourlyRates> {
   const [settings, employees] = await Promise.all([getCompanySettings(), loadEmployeeHourlyCosts()]);
 
   const indirect = normalizeIndirectCosts(settings.indirect_costs);
+  const investmentQuoteMonthlyHt = investmentMonthlyQuoteOverhead(settings.investment_plan?.entries ?? []);
   const overheadAnnualHt = computeExploitationAnnual(settings.charges_exploitation?.entries ?? [])
-    + getInvestmentMonthlyTotal(settings.investment_plan?.entries ?? []) * 12;
+    + investmentQuoteMonthlyHt * 12;
   const amortizationAnnualHt = computeAmortizationAnnual(indirect.equipmentAssets);
   const productiveHoursPerYear = employees.productiveCount * indirect.productiveHoursPerEmployeeYear;
 
@@ -137,6 +141,8 @@ export async function getCompanyHourlyRates(): Promise<CompanyHourlyRates> {
     amortizationAnnualHt: round2(amortizationAnnualHt),
     amortizationRatePerHour: productiveHoursPerYear > 0 ? round2(amortizationAnnualHt / productiveHoursPerYear) : 0,
     overheadAnnualHt: round2(overheadAnnualHt),
+    investmentQuoteMonthlyHt: round2(investmentQuoteMonthlyHt),
+    investmentQuoteRatePerHour: round2(investmentQuoteHourlyRate(investmentQuoteMonthlyHt, employees.productiveCount, indirect.productiveHoursPerEmployeeYear)),
     overheadRatePerHour: productiveHoursPerYear > 0 ? round2(overheadAnnualHt / productiveHoursPerYear) : 0,
     equipmentAssets: indirect.equipmentAssets,
     defaultMarginRate: Number(settings.default_margin_rate ?? DEFAULT_QUOTE_MARGIN_RATE),
