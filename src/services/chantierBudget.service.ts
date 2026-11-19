@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { getTasksByChantierId, type ChantierTaskRow } from "./chantierTasks.service";
 import { listChantierPurchaseRequests, type ChantierPurchaseRequestRow } from "./chantierPurchaseRequests.service";
 import { listIntervenants } from "./intervenants.service";
+import { effectiveIntervenantHourlyCost } from "./intervenantCosts.service";
 import { getChantierMaterialCost } from "./productStock.service";
 
 export type ChantierBudgetSettingsRow = {
@@ -235,8 +236,9 @@ export async function listChantierLaborCostSummaries(
 
   const individualRateById = new Map(
     intervenants
-      .filter((intervenant) => Number(intervenant.hourly_cost_ht ?? 0) > 0)
-      .map((intervenant) => [intervenant.id, Number(intervenant.hourly_cost_ht)]),
+      .map((intervenant) => ({ id: intervenant.id, rate: effectiveIntervenantHourlyCost(intervenant) }))
+      .filter((item): item is { id: string; rate: number } => item.rate !== null)
+      .map((item) => [item.id, item.rate] as const),
   );
   const totalsByChantierId = new Map<string, {
     hours: number;
