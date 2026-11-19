@@ -10,6 +10,7 @@ import type {
   StatisticsTimeEntryRow,
 } from "../services/statistiques.service";
 import type { MaterielDemandeRow } from "../services/materielDemandes.service";
+import { configuredWorkerRates, valueLaborEntry, sumLaborValues } from "../services/laborCostValuation.service";
 
 export type StatisticsPeriod = "7d" | "30d" | "90d" | "year" | "custom";
 export type StatisticsClientType = "particulier" | "sci" | "professionnel" | "autre";
@@ -109,6 +110,11 @@ export type StatisticsView = {
   integrityWarnings: string[];
   alerts: StatisticsAlert[];
   globalActivity: StatisticsMetric[];
+  finances: {
+    summary: StatisticsMetric[];
+    fallbackHours: number;
+    historicalHours: number;
+  };
   performance: {
     summary: StatisticsMetric[];
     topChantiers: StatisticsDriftRow[];
@@ -620,6 +626,17 @@ export function computeStatisticsView(dataset: StatisticsDataset, filters: Stati
   filteredMateriel.filter((row) => valueInRange(row.created_at, recentRange)).forEach((row) => activeIntervenantIds7d.add(row.intervenant_id));
   filteredInfoRequests.filter((row) => valueInRange(row.request_date || row.created_at, recentRange)).forEach((row) => activeIntervenantIds7d.add(row.intervenant_id));
 
+  const workerCosts = configuredWorkerRates(dataset.intervenants);
+  const laborValues = filteredTimeEntries.map((entry) => valueLaborEntry({
+    chantier_id: entry.chantier_id,
+    task_id: entry.task_id,
+    intervenant_id: entry.intervenant_id,
+    duration_hours: entry.duration_hours,
+    hourly_cost_snapshot_ht: entry.hourly_cost_snapshot_ht,
+    hourly_cost_snapshot_source: entry.hourly_cost_snapshot_source,
+  }, workerCosts, dataset.chantierLaborRates[entry.chantier_id] ?? 48));
+  const laborTotal = sumLaborValues(laborValues);
+  const historicalHours = filteredTimeEntries.reduce((n, entry) => n + (entry.hourly_cost_snapshot_ht == null ? Math.max(0, entry.duration_hours) : 0), 0);
   const totalPlannedHours = sum(filteredTasks.map((task) => task.temps_prevu_h));
   const totalActualHours = dataset.availability.timeEntries
     ? sum(filteredTimeEntries.map((entry) => entry.duration_hours))
@@ -881,6 +898,8 @@ export function computeStatisticsView(dataset: StatisticsDataset, filters: Stati
 
   const integrityWarnings = [
     ...dataset.notes,
+    ...(historicalHours > 0 ? [`${historicalHours.toLocaleString("fr-FR")} h de pointages antérieurs à l'historisation : leur coût est estimé avec les tarifs actuels.`] : []),
+    ...(laborTotal.hoursUsingChantierRate > 0 ? [`${laborTotal.hoursUsingChantierRate.toLocaleString("fr-FR")} h valorisées au taux de secours du chantier, faute de taux individuel fiable.`] : []),
     ...(
       [
         filteredTimeEntries.filter((entry) => entry.task_id && !entry.task).length > 0
@@ -914,6 +933,7 @@ export function computeStatisticsView(dataset: StatisticsDataset, filters: Stati
   ];
 
   const definitions: StatisticsDefinition[] = [
+    { key: "real_labor_direct", label: "Main-d'œuvre réelle directe", source: "chantier_time_entries + intervenants + chantier_budget_settings", formula: "Somme des heures × coût horaire figé ; à défaut coût individuel actuel, sinon taux chantier. Les coûts non historisés sont signalés et les frais indirects sont exclus." },
     { key: "global_time_drift", label: "Écart global temps", source: "chantier_tasks.temps_prevu_h + chantier_time_entries.duration_hours (ou chantier_tasks.temps_reel_h si les saisies sont indisponibles)", formula: "Somme temps réel - somme temps prévu ; dérive % = (écart / temps prévu) x 100" },
     { key: "active_intervenants_7d", label: "Intervenants actifs sur 7 jours", source: "chantier_time_entries, intervenant_daily_checklists, materiel_demandes, intervenant_information_requests", formula: "Nombre d'intervenants distincts avec au moins une remontée sur les 7 derniers jours" },
     { key: "task_average_hours", label: "Temps moyen par tâche", source: "chantier_tasks + chantier_time_entries", formula: "Temps réel cumulé des tâches du groupe / nombre d'occurrences du groupe" },
@@ -940,6 +960,16 @@ export function computeStatisticsView(dataset: StatisticsDataset, filters: Stati
       { label: "Blocages ouverts", value: openBlockagesCount },
       { label: "Demandes d'information en attente", value: openInfoRequests.length },
     ],
+    finances: {
+      summary: [
+        { label: "Coût direct de main-d'œuvre", value: dataset.availability.timeEntries ? laborTotal.laborCostHt : null, unit: "€", help: "Coût figé au pointage, sinon coût individuel actuel ou taux chantier de secours ; sans frais indirects." },
+        { label: "Taux direct moyen", value: laborTotal.hours > 0 ? laborTotal.laborCostHt / laborTotal.hours : null, unit: "€/h" },
+        { label: "Heures sans tarif historique", value: historicalHours, unit: "h" },
+        { label: "Heures au tarif de secours", value: laborTotal.hoursUsingChantierRate, unit: "h" },
+      ],
+      fallbackHours: laborTotal.hoursUsingChantierRate,
+      historicalHours,
+    },
     performance: {
       summary: [
         { label: "Temps total prévu", value: totalPlannedHours, unit: "h" },

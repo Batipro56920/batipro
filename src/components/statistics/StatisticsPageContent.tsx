@@ -219,6 +219,19 @@ export default function StatisticsPageContent() {
             </StatisticsSectionCard>
           ) : null}
 
+          <StatisticsSectionCard eyebrow="Coûts" title="Coût réel de main-d'œuvre" subtitle="Même méthode de valorisation que le budget et la rentabilité des chantiers.">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {view.finances.summary.map((metric) => (
+                <StatisticsMetricCard key={metric.label} locale={locale} metric={metric} />
+              ))}
+            </div>
+            {(view.finances.historicalHours > 0 || view.finances.fallbackHours > 0) && (
+              <p className="mt-4 text-sm text-amber-800">
+                Les coûts des anciens pointages et des heures sans coût individuel sont des estimations, pas des coûts historiquement certifiés.
+              </p>
+            )}
+          </StatisticsSectionCard>
+
           <StatisticsSectionCard eyebrow="Temps" title="Dérives et heures" subtitle="Comparer rapidement le temps prévu et le temps réalisé.">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {view.performance.summary.map((metric) => (
