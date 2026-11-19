@@ -96,6 +96,18 @@ begin
   end if;
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(new.organization_id::text));
 
+  -- Direct table access must not bypass the RPC's worker availability check.
+  if exists (
+    select 1 from public.office_planning_assignments a
+    where a.organization_id = new.organization_id
+      and a.intervenant_id = new.intervenant_id
+      and a.id is distinct from new.id
+      and a.date_start <= new.date_end
+      and a.date_end >= new.date_start
+  ) then
+    raise exception 'worker_already_booked';
+  end if;
+
   if exists (
     select 1
     from (
