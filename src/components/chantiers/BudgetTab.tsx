@@ -448,6 +448,43 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         </div>
       </section>
 
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Main-d'œuvre par tâche</div>
+            <h2 className="mt-1 text-base font-semibold text-slate-950">Prévisionnel et réalisé</h2>
+            <p className="mt-1 text-xs text-slate-500">Coût réel direct basé sur les heures pointées et le taux de chaque intervenant. Frais généraux et amortissements non inclus dans cette colonne.</p>
+          </div>
+          <div className="text-xs text-slate-500">{dashboard?.taskLabor.length ?? 0} tâche(s)</div>
+        </div>
+        {!dashboard?.taskLabor.length ? (
+          <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Aucune tâche ni pointage à rapprocher.</p>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[650px] text-left text-sm">
+              <thead><tr className="border-b text-xs text-slate-500">
+                <th className="py-3 pr-3">Tâche / lot</th><th className="px-2 py-3 text-right">Heures prévues</th>
+                <th className="px-2 py-3 text-right">Heures réelles</th><th className="px-2 py-3 text-right">MO prévue</th>
+                <th className="px-2 py-3 text-right">MO réelle</th><th className="py-3 pl-2 text-right">Écart coût</th>
+              </tr></thead>
+              <tbody>
+                {dashboard.taskLabor.map((task) => {
+                  const delta = task.actualLaborCostHt - task.plannedLaborCostHt;
+                  return <tr key={task.taskId ?? "unassigned"} className="border-b last:border-0">
+                    <td className="py-3 pr-3"><div className="font-semibold text-slate-900">{task.title}</div><div className="text-xs text-slate-500">{task.lot}</div></td>
+                    <td className="px-2 py-3 text-right">{formatHours(task.plannedHours)}</td>
+                    <td className="px-2 py-3 text-right">{formatHours(task.actualHours)}</td>
+                    <td className="px-2 py-3 text-right">{formatMoney(task.plannedLaborCostHt)}</td>
+                    <td className="px-2 py-3 text-right font-semibold">{formatMoney(task.actualLaborCostHt)}</td>
+                    <td className={`py-3 pl-2 text-right font-semibold ${delta > 0 ? "text-red-700" : "text-emerald-700"}`}>{delta > 0 ? "+" : ""}{formatMoney(delta)}</td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-2">
         <form className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" onSubmit={(event) => void addExpense(event)}>
           <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Coûts réels</div>
