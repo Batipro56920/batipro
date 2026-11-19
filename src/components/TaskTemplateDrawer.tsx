@@ -1920,8 +1920,6 @@ export default function TaskTemplateDrawer({
                       />
                       <span className="shrink-0 text-sm text-slate-500">%</span>
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-500">Moyenne des {hourlyRates?.productiveEmployeeCount ?? 0} salarié(s) productifs · Profils &amp; accès</div>
-                    </div>
                     <div className="mt-1 text-[11px] text-slate-500">
                       Appliquée à la main d'oeuvre pour donner son prix de vente. Vide = marge main d'oeuvre de l'entreprise.
                     </div>
