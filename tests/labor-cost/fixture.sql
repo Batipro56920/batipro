@@ -1,3 +1,5 @@
+create role anon;
+create role authenticated;
 create table public.intervenants (
  id uuid primary key, status text not null,
  hourly_cost_ht numeric, daily_rate_ht numeric
