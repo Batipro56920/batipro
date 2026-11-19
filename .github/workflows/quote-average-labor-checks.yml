@@ -1,0 +1,32 @@
+name: Quote average labor checks
+on:
+  push:
+    branches: [fix/quote-average-labor-cost-20261119]
+  pull_request:
+    paths:
+      - "src/services/taskCostBasis.ts"
+      - "src/services/quoteAverageLaborRate*"
+      - "src/components/TaskTemplateDrawer.tsx"
+      - ".github/workflows/quote-average-labor-checks.yml"
+permissions:
+  contents: read
+jobs:
+  quote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Average labor rate tests
+        run: node --experimental-strip-types --test src/services/quoteAverageLaborRate.test.mjs
+      - name: TypeScript
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: Targeted ESLint
+        run: npx eslint src/services/taskCostBasis.ts src/services/quoteAverageLaborRate.ts src/components/TaskTemplateDrawer.tsx
+      - name: Production build
+        run: npm run build
