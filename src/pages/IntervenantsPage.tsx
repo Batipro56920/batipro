@@ -16,7 +16,8 @@ import {
   updateIntervenant,
 } from "../services/intervenants.service";
 import { useI18n } from "../i18n";
-import IntervenantFormFields, {
+import IntervenantFormFields from "../components/intervenants/IntervenantFormFields";
+import {
   EMPTY_INTERVENANT_FORM,
   INTERVENANT_STATUS_LABELS,
   effectiveHourlyCost,
@@ -24,7 +25,7 @@ import IntervenantFormFields, {
   intervenantPayload,
   moneyFr,
   type IntervenantFormState,
-} from "../components/intervenants/IntervenantFormFields";
+} from "../components/intervenants/intervenantFormModel";
 
 type IntervenantLinkRow = {
   intervenant_id: string;
