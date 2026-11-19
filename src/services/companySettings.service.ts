@@ -58,6 +58,13 @@ export type CompanyInvestmentEntry = {
   startDate: string;
   notes: string;
   status: "planned" | "paused" | "acquired";
+  /**
+   * reserve: objectif de trésorerie / financement, jamais un coût de revient.
+   * overhead: coût additionnel avéré, non présent dans les charges fixes
+   * ou les amortissements, à répartir sur les heures productives.
+   * Les fiches existantes restent en réserve jusqu'à classification explicite.
+   */
+  quoteAllocation?: "reserve" | "overhead";
 };
 
 export type CompanyInvestmentSettings = {
@@ -77,6 +84,7 @@ export function normalizeInvestmentPlan(raw: unknown): CompanyInvestmentSettings
       startDate: String(entry?.startDate ?? new Date().toISOString().slice(0, 10)),
       notes: String(entry?.notes ?? ""),
       status: entry?.status === "paused" || entry?.status === "acquired" ? entry.status : "planned",
+      quoteAllocation: entry?.quoteAllocation === "overhead" ? "overhead" : "reserve",
     })),
   };
 }
