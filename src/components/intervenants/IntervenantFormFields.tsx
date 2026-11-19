@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { IntervenantRow, IntervenantStatus } from "../../services/intervenants.service";
+import { EXTERNAL_WORKING_HOURS_PER_DAY, effectiveIntervenantHourlyCost } from "../../services/intervenantCosts.service";
+export { effectiveIntervenantHourlyCost as effectiveHourlyCost } from "../../services/intervenantCosts.service";
 
 export type IntervenantFormState = {
   nom: string;
@@ -44,16 +46,6 @@ export function parseHourlyValue(value: string): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export function effectiveHourlyCost(row: Pick<IntervenantRow, "status" | "hourly_cost_ht" | "daily_rate_ht">): number | null {
-  if (row.hourly_cost_ht != null && Number.isFinite(Number(row.hourly_cost_ht)) && Number(row.hourly_cost_ht) > 0) {
-    return Number(row.hourly_cost_ht);
-  }
-  if (row.status === "subcontractor" || row.status === "temporary_worker") {
-    const daily = Number(row.daily_rate_ht);
-    return Number.isFinite(daily) && daily > 0 ? daily / 7 : null;
-  }
-  return null;
-}
 
 export function intervenantFormFromRow(row: IntervenantRow): IntervenantFormState {
   return {
@@ -151,7 +143,7 @@ export default function IntervenantFormFields({
   const external = form.status === "subcontractor" || form.status === "temporary_worker";
   const hourly = parseHourlyValue(form.hourly_cost_ht);
   const daily = parseHourlyValue(form.daily_rate_ht);
-  const inferredHour = !hourly && external && daily != null ? daily / 7 : null;
+  const inferredHour = hourly == null && external && daily != null ? effectiveIntervenantHourlyCost({status: form.status, hourly_cost_ht: null, daily_rate_ht: daily}) : null;
   const numericInput = (key: "hourly_cost_ht" | "hourly_sale_price_ht" | "daily_rate_ht", label: string, hint?: string) => (
     <label className="block text-sm font-medium text-slate-700">
       {label}
@@ -210,7 +202,7 @@ export default function IntervenantFormFields({
         {numericInput("hourly_sale_price_ht", "Prix de vente horaire")}
         <div className="md:col-span-2"><SalaryEstimator key={form.status} hourlyCost={form.hourly_cost_ht} onHourlyCostChange={(value) => update("hourly_cost_ht", value)} /></div>
       </div> : external ? <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {numericInput("daily_rate_ht", "Tarif d'achat journalier HT", "Base de conversion indicative : 7 heures par jour.")}
+        {numericInput("daily_rate_ht", "Tarif d'achat journalier HT", "Base de conversion indicative : ${EXTERNAL_WORKING_HOURS_PER_DAY} heures par jour.")}
         {numericInput("hourly_cost_ht", "Coût horaire d'achat HT (facultatif)", "Prioritaire sur le tarif journalier lorsqu'il est renseigné.")}
         {form.status === "subcontractor" ? <label className="block text-sm font-medium text-slate-700 md:col-span-2">Assurance / références
           <input className={inputClass} value={form.insurance} placeholder="RC pro, décennale..."
