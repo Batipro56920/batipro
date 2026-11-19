@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { investmentMonthlyQuoteOverhead, investmentQuoteHourlyRate } from "../services/investmentQuoteAllocation";
 import { Building2, CalendarDays, CirclePause, Landmark, Pencil, Plus, Save, Target, Trash2, X } from "lucide-react";
 import { FinancialNavigation } from "../features/financial/components/FinancialNavigation";
 import {
   getCompanySettings,
   getInvestmentMonthlyTotal,
   investmentMonthlyContribution,
-  investmentMonthlyQuoteOverhead,
   upsertCompanySettings,
   type CompanyInvestmentCategory,
   type CompanyInvestmentEntry,
@@ -72,7 +72,7 @@ export default function InvestmentsPage() {
   const quoteMonthly = investmentMonthlyQuoteOverhead(entries);
   const hoursPerWorker = hourlyRates?.productiveHoursPerEmployeeYear ?? 1607;
   const productiveWorkers = hourlyRates?.productiveEmployeeCount ?? 0;
-  const quoteHourly = productiveWorkers > 0 ? quoteMonthly * 12 / (productiveWorkers * hoursPerWorker) : 0;
+  const quoteHourly = investmentQuoteHourlyRate(quoteMonthly, productiveWorkers, hoursPerWorker);
   const targetTotal = active.reduce((sum, entry) => sum + entry.targetAmountHt, 0);
   const filtered = filter === "all" ? entries : entries.filter((entry) => entry.category === filter);
   const next = [...active].sort((a, b) => targetDate(a).getTime() - targetDate(b).getTime())[0];
