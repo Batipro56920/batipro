@@ -50,6 +50,9 @@ export function validateObatImport(input: Omit<ObatImportInput, "project">): voi
 export async function importObatQuoteToProject(input: ObatImportInput): Promise<CrmQuoteRow> {
   validateObatImport(input);
   const { project, file, quoteNumber, description, dateIssued, amountHt, amountTtc, status } = input;
+  // Check file content as well as its extension: never register an arbitrary upload as a PDF.
+  const signature = new TextDecoder().decode(await file.slice(0, 5).arrayBuffer());
+  if (signature !== "%PDF-") throw new Error("Ce fichier ne semble pas être un PDF valide.");
   const path = `obat/${project.sourceType}/${project.sourceId}/${crypto.randomUUID()}.pdf`;
   let quoteId: string | null = null;
   let uploaded = false;
