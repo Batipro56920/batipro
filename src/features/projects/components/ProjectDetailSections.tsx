@@ -5,7 +5,7 @@ import type { InvoiceRecord, InvoiceType } from "../../invoices/domain/types";
 import { listInvoices, saveInvoice } from "../../invoices/infrastructure/invoiceRepository";
 import { quoteBuilderToBusinessDocument } from "../../quotes/builder/quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderModel";
-import { deleteCrmQuote, loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
+import { deleteCrmQuote, loadCrmQuoteEngineData, transformAcceptedQuoteToChantier, updateCrmQuote, type CrmQuoteStatus } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { EmptyProjectBlock, Panel, formatCurrency, formatDate, useSalespersonName } from "./ProjectShared";
 import { assignProjectSalesperson, listSalespeople, type Salesperson } from "../../../services/salespeople.service";
@@ -391,6 +391,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
   const [importObatOpen, setImportObatOpen] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
+  const [savingObatStatusId, setSavingObatStatusId] = useState<string | null>(null);
   const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte" && !isExternalObatQuote(quote));
 
   useEffect(() => {
@@ -563,6 +564,25 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
     }
   }
 
+  async function changeObatStatus(quote: ProjectRecord["quotes"][number], next: CrmQuoteStatus) {
+    if (!isExternalObatQuote(quote) || savingObatStatusId) return;
+    setSavingObatStatusId(quote.id);
+    setPdfError(null);
+    try {
+      await updateCrmQuote(quote.id, {
+        statut: next,
+        signature_status: next === "accepte" ? "signe" : "attente_signature",
+        accepted_at: next === "accepte" ? new Date().toISOString() : null,
+        refused_at: next === "refuse" ? new Date().toISOString() : null,
+      });
+      await onUpdated?.();
+    } catch (error) {
+      setPdfError(error instanceof Error ? error.message : "Modification du statut Obat impossible.");
+    } finally {
+      setSavingObatStatusId(null);
+    }
+  }
+
   async function showObatPdf(quote: ProjectRecord["quotes"][number]) {
     setPdfError(null);
     setOpeningPdfId(quote.id);
@@ -674,7 +694,19 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
                   return (
                     <tr key={quote.id}>
                       <td className="px-4 py-3 font-semibold text-slate-950">{quote.quote_number}{external && <span className="ml-2 rounded-lg bg-sky-50 px-2 py-1 text-xs text-sky-800">Obat · PDF</span>}</td>
-                      <td className="px-4 py-3 text-slate-500">{quote.statut}</td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {external ? (
+                          <select aria-label={`Statut du devis Obat ${quote.quote_number}`} value={quote.statut}
+                            onChange={(event) => void changeObatStatus(quote, event.target.value as CrmQuoteStatus)}
+                            disabled={savingObatStatusId === quote.id}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs disabled:opacity-50">
+                            <option value="brouillon">Brouillon</option>
+                            <option value="envoye">Envoyé</option>
+                            <option value="accepte">Accepté</option>
+                            <option value="refuse">Refusé</option>
+                          </select>
+                        ) : quote.statut}
+                      </td>
                       <td className="px-4 py-3 text-slate-500">{quote.signature_status}</td>
                       <td className="px-4 py-3 text-slate-500">{formatDate(quote.valid_until)}</td>
                       <td className="px-4 py-3 text-right font-semibold">{formatCurrency(quote.montant_ht)}</td>
