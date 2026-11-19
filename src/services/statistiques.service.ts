@@ -247,8 +247,9 @@ async function fetchTimeEntriesWithFallback(notes: string[]): Promise<{ rows: St
   const selectV2 = "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, quantite_realisee, note, created_at, updated_at";
   const selectV1 = "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, note, created_at, updated_at";
   const latest = await supabase.from("chantier_time_entries").select(selectV3);
-  if (latest.error && !isMissingColumnError(latest.error, "chantier_time_entries", ["hourly_cost_snapshot_ht", "hourly_cost_snapshot_source"])) throw latest.error;
-  const first = latest.error ? await supabase.from("chantier_time_entries").select(selectV2) : latest;
+  const snapshotColumnsMissing = latest.error && isMissingColumnError(latest.error, "chantier_time_entries", ["hourly_cost_snapshot_ht", "hourly_cost_snapshot_source"]);
+  if (latest.error && !snapshotColumnsMissing && !isMissingRelationError(latest.error, "chantier_time_entries")) throw latest.error;
+  const first = snapshotColumnsMissing ? await supabase.from("chantier_time_entries").select(selectV2) : latest;
   if (first.error) {
     if (isMissingRelationError(first.error, "chantier_time_entries")) {
       notes.push("Table chantier_time_entries indisponible : certains KPI temps ne sont pas calculables.");
