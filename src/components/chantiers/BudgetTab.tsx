@@ -284,6 +284,14 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
           <div className="mt-1 text-xs text-slate-500">
             MO {formatMoney(dashboard?.coutMoReelHt ?? 0)} · achats {formatMoney(dashboard?.achatsReelsHt ?? 0)}
           </div>
+          <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-600">
+            <div className="font-semibold text-slate-800">Main-d'œuvre : coût direct / coût complet</div>
+            <div className="mt-1">Direct : {formatMoney(dashboard?.coutMoReelHt ?? 0)}</div>
+            {dashboard?.coutMoReelCompletHt != null && dashboard.coutMoReelIndirectHt != null
+              ? <div>Complet indicatif : {formatMoney(dashboard.coutMoReelCompletHt)} (dont frais généraux et amortissements : {formatMoney(dashboard.coutMoReelIndirectHt)})</div>
+              : <div className="text-amber-700">Coût complet indisponible : vérifier les charges de l'entreprise.</div>}
+            <p className="mt-1 text-[11px] text-slate-500">Le total et la marge réelle ci-dessus restent calculés sur les coûts directs ; les frais indirects sont présentés séparément pour éviter leur double comptage.</p>
+          </div>
           {dashboard?.achatsLivresHt ? (
             <div className="mt-0.5 text-[11px] text-slate-500">
               dont {formatMoney(dashboard.achatsLivresHt)} de matériaux (stock et livraisons)
