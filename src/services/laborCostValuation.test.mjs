@@ -36,3 +36,10 @@ test("consolidation de plusieurs coûts et taux",()=>{
  const s=sumLaborValues(vals);
  assert.deepEqual(s,{hours:5,laborCostHt:184,hoursUsingChantierRate:3,hoursUsingSnapshot:2});
 });
+
+test("un pointage figé au taux chantier reste signalé comme estimation",()=>{
+ const v=valueLaborEntry(entry({hourly_cost_snapshot_ht:48,hourly_cost_snapshot_source:"chantier"}),new Map(),48);
+ assert.equal(v.laborCostHt,336);
+ assert.equal(v.hoursUsingSnapshot,7);
+ assert.equal(v.hoursUsingChantierRate,7);
+});
