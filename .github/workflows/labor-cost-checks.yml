@@ -1,0 +1,65 @@
+name: Labor costing checks
+on:
+  pull_request:
+    paths:
+      - "src/services/chantierBudget.service.ts"
+      - "src/services/chantierTimeEntries.service.ts"
+      - "src/services/laborCostValuation*"
+      - "supabase/migrations/20261119132500_chantier_time_hourly_cost_snapshot.sql"
+      - "tests/labor-cost/**"
+      - ".github/workflows/labor-cost-checks.yml"
+  push:
+    branches: [feat/unified-labor-costs-20261119]
+permissions:
+  contents: read
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Labor valuation tests
+        run: node --experimental-strip-types --test src/services/laborCostValuation.test.mjs
+      - name: TypeScript and production build
+        run: npm run build
+      - name: Targeted ESLint
+        run: npx eslint src/services/laborCostValuation.service.ts src/services/chantierBudget.service.ts src/services/chantierTimeEntries.service.ts
+  sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: labor_test
+          POSTGRES_USER: postgres
+          POSTGRES_DB: labor_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d labor_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: labor_test
+      PGDATABASE: labor_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Prepare legacy fixture
+        run: psql -v ON_ERROR_STOP=1 -f tests/labor-cost/fixture.sql
+      - name: Apply new migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261119132500_chantier_time_hourly_cost_snapshot.sql
+      - name: Verify snapshot behavior
+        run: psql -v ON_ERROR_STOP=1 -f tests/labor-cost/snapshot.sql
