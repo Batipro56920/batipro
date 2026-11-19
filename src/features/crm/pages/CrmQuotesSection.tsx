@@ -9,6 +9,7 @@ import { QuotesTable } from "../quotes/components/QuotesTable";
 import { QuotesToolbar } from "../quotes/components/QuotesToolbar";
 import { useQuoteFilters } from "../quotes/hooks/useQuoteFilters";
 import type { QuoteFilters, QuoteWithParty } from "../quotes/types";
+import { isExternalObatQuote, openExternalQuotePdf } from "../../../services/obatProjectQuotes.service";
 
 const STATUS_LABELS: Record<string, string> = {
   brouillon: "Brouillon",
@@ -69,6 +70,7 @@ export default function CrmQuotesSection({
   const invalidStatusFromUrl = Boolean(urlStatus && !statusFromUrl);
   const invalidSignatureStatusFromUrl = Boolean(urlSignatureStatus && !signatureStatusFromUrl);
   const [selectedQuote, setSelectedQuote] = useState<QuoteWithParty | null>(null);
+  const [obatError, setObatError] = useState<string | null>(null);
   const { filters, setFilters, filteredRows, statuses, clients, salespeople } = useQuoteFilters({
     rows,
     prospectById,
@@ -182,13 +184,37 @@ export default function CrmQuotesSection({
     setSearchParams(nextSearchParams, { replace: true });
   }
 
-  const actions = { onCreate, onStatus, onTransform, onPdf };
+  const actions = {
+    onCreate,
+    onStatus: (row: CrmQuoteRow, status: CrmQuoteRow["statut"]) => {
+      if (!isExternalObatQuote(row)) onStatus(row, status);
+    },
+    onTransform: (row: CrmQuoteRow) => {
+      if (!isExternalObatQuote(row)) onTransform(row);
+    },
+    onPdf: (row: CrmQuoteRow) => {
+      if (!isExternalObatQuote(row)) {
+        onPdf(row);
+        return;
+      }
+      setObatError(null);
+      const popup = window.open("", "_blank");
+      void openExternalQuotePdf(row).then((url) => {
+        if (popup) popup.location.href = url;
+        else window.location.assign(url);
+      }).catch((error: unknown) => {
+        popup?.close();
+        setObatError(error instanceof Error ? error.message : "Impossible d'ouvrir le PDF Obat.");
+      });
+    },
+  };
   const statusLabel = STATUS_LABELS[filters.status] ?? filters.status;
   const signatureStatusLabel = SIGNATURE_STATUS_LABELS[filters.signatureStatus] ?? filters.signatureStatus;
 
   return (
     <div className="space-y-5">
       <QuotesHeader onCreate={onCreate} />
+      {obatError && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{obatError}</div>}
       <QuotesKpiGrid rows={rows} />
       <QuotesToolbar
         filters={filters}
