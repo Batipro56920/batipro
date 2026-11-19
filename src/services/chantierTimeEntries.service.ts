@@ -8,6 +8,7 @@ export type ChantierTimeEntryRow = {
   work_date: string;
   duration_hours: number | null;
   hourly_cost_snapshot_ht: number | null;
+  hourly_cost_snapshot_source: "intervenant" | "journalier" | "chantier" | null;
   quantite_realisee: number | null;
   note: string | null;
   created_at: string | null;
@@ -56,6 +57,7 @@ function mapRow(row: any): ChantierTimeEntryRow {
     work_date: String(row.work_date ?? ""),
     duration_hours: normalizeNumber(row.duration_hours),
     hourly_cost_snapshot_ht: normalizeNumber(row.hourly_cost_snapshot_ht),
+    hourly_cost_snapshot_source: ["intervenant", "journalier", "chantier"].includes(row.hourly_cost_snapshot_source) ? row.hourly_cost_snapshot_source : null,
     quantite_realisee: normalizeNumber(row.quantite_realisee),
     note: normalizeText(row.note),
     created_at: normalizeText(row.created_at),
@@ -67,7 +69,7 @@ export async function listChantierTimeEntriesByChantierId(chantierId: string): P
   if (!chantierId) throw new Error("chantierId manquant.");
 
   const selectV3 =
-    "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, hourly_cost_snapshot_ht, quantite_realisee, note, created_at, updated_at";
+    "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, hourly_cost_snapshot_ht, hourly_cost_snapshot_source, quantite_realisee, note, created_at, updated_at";
   const selectV2 =
     "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, quantite_realisee, note, created_at, updated_at";
   const selectV1 = "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, note, created_at, updated_at";
@@ -80,7 +82,7 @@ export async function listChantierTimeEntriesByChantierId(chantierId: string): P
     .order("created_at", { ascending: false });
 
   if (first.error) {
-    if (!isMissingColumnError(first.error, ["hourly_cost_snapshot_ht", "quantite_realisee", "updated_at"])) throw first.error;
+    if (!isMissingColumnError(first.error, ["hourly_cost_snapshot_ht", "hourly_cost_snapshot_source", "quantite_realisee", "updated_at"])) throw first.error;
     const v2 = await supabase
       .from("chantier_time_entries" as any)
       .select(selectV2)
@@ -124,14 +126,14 @@ export async function createChantierTimeEntry(payload: CreateChantierTimeEntryPa
   };
 
   const selectV3 =
-    "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, hourly_cost_snapshot_ht, quantite_realisee, note, created_at, updated_at";
+    "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, hourly_cost_snapshot_ht, hourly_cost_snapshot_source, quantite_realisee, note, created_at, updated_at";
   const selectV2 =
     "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, quantite_realisee, note, created_at, updated_at";
   const selectV1 = "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, note, created_at, updated_at";
 
   const first = await (supabase as any).from("chantier_time_entries").insert([insertRow]).select(selectV3).single();
   if (first.error) {
-    if (!isMissingColumnError(first.error, ["hourly_cost_snapshot_ht", "quantite_realisee", "updated_at"])) throw first.error;
+    if (!isMissingColumnError(first.error, ["hourly_cost_snapshot_ht", "hourly_cost_snapshot_source", "quantite_realisee", "updated_at"])) throw first.error;
     const v2 = await (supabase as any).from("chantier_time_entries").insert([insertRow]).select(selectV2).single();
     if (!v2.error) return mapRow(v2.data);
     if (!isMissingColumnError(v2.error, ["quantite_realisee", "updated_at"])) throw v2.error;
