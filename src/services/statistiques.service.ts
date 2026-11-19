@@ -31,6 +31,8 @@ export type StatisticsTimeEntryRow = {
   intervenant_id: string;
   work_date: string;
   duration_hours: number;
+  hourly_cost_snapshot_ht: number | null;
+  hourly_cost_snapshot_source: "intervenant" | "journalier" | "chantier" | null;
   quantite_realisee: number | null;
   note: string | null;
   created_at: string | null;
@@ -106,6 +108,7 @@ export type StatisticsDataset = {
   dailyChecklists: StatisticsChecklistRow[];
   availability: StatisticsDatasetAvailability;
   notes: string[];
+  chantierLaborRates: Record<string, number>;
 };
 
 function normalizeText(value: unknown): string | null {
@@ -240,9 +243,12 @@ async function fetchTasksWithFallback(notes: string[]): Promise<{ rows: Statisti
 }
 
 async function fetchTimeEntriesWithFallback(notes: string[]): Promise<{ rows: StatisticsTimeEntryRow[]; available: boolean }> {
+  const selectV3 = "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, hourly_cost_snapshot_ht, hourly_cost_snapshot_source, quantite_realisee, note, created_at, updated_at";
   const selectV2 = "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, quantite_realisee, note, created_at, updated_at";
   const selectV1 = "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, note, created_at, updated_at";
-  const first = await supabase.from("chantier_time_entries").select(selectV2);
+  const latest = await supabase.from("chantier_time_entries").select(selectV3);
+  if (latest.error && !isMissingColumnError(latest.error, "chantier_time_entries", ["hourly_cost_snapshot_ht", "hourly_cost_snapshot_source"])) throw latest.error;
+  const first = latest.error ? await supabase.from("chantier_time_entries").select(selectV2) : latest;
   if (first.error) {
     if (isMissingRelationError(first.error, "chantier_time_entries")) {
       notes.push("Table chantier_time_entries indisponible : certains KPI temps ne sont pas calculables.");
@@ -259,6 +265,8 @@ async function fetchTimeEntriesWithFallback(notes: string[]): Promise<{ rows: St
         intervenant_id: String(row.intervenant_id ?? ""),
         work_date: String(row.work_date ?? ""),
         duration_hours: Number(row.duration_hours ?? 0) || 0,
+        hourly_cost_snapshot_ht: null,
+        hourly_cost_snapshot_source: null,
         quantite_realisee: null,
         note: normalizeText(row.note),
         created_at: normalizeText(row.created_at),
@@ -275,6 +283,9 @@ async function fetchTimeEntriesWithFallback(notes: string[]): Promise<{ rows: St
       intervenant_id: String(row.intervenant_id ?? ""),
       work_date: String(row.work_date ?? ""),
       duration_hours: Number(row.duration_hours ?? 0) || 0,
+      hourly_cost_snapshot_ht: normalizeNumber(row.hourly_cost_snapshot_ht),
+      hourly_cost_snapshot_source: ["intervenant","journalier","chantier"].includes(String(row.hourly_cost_snapshot_source))
+        ? row.hourly_cost_snapshot_source as StatisticsTimeEntryRow["hourly_cost_snapshot_source"] : null,
       quantite_realisee: normalizeNumber(row.quantite_realisee),
       note: normalizeText(row.note),
       created_at: normalizeText(row.created_at),
@@ -322,11 +333,12 @@ export async function loadStatisticsDataset(): Promise<StatisticsDataset> {
     materielRes,
     infoRequestsRes,
     dailyChecklistsRes,
+    budgetRatesRes,
   ] = await Promise.all([
     listChantiers({ scope: "actifs" }),
     fetchOptionalTable<IntervenantRow>(
       "intervenants",
-      "id, chantier_id, nom, entreprise, metier, email, telephone, notes, user_id, created_at",
+      "id, chantier_id, nom, entreprise, metier, email, telephone, notes, user_id, created_at, status, hourly_cost_ht, daily_rate_ht",
       (row) => ({
         id: String(row.id ?? ""),
         chantier_id: normalizeText(row.chantier_id),
@@ -338,6 +350,9 @@ export async function loadStatisticsDataset(): Promise<StatisticsDataset> {
         notes: normalizeText((row as Record<string, unknown>).notes),
         user_id: normalizeText((row as Record<string, unknown>).user_id),
         created_at: normalizeText(row.created_at),
+        status: (row.status ?? "other") as IntervenantRow["status"],
+        hourly_cost_ht: normalizeNumber(row.hourly_cost_ht),
+        daily_rate_ht: normalizeNumber(row.daily_rate_ht),
       }),
       notes,
       "Table intervenants indisponible : certains regroupements par intervenant sont désactivés.",
@@ -444,8 +459,19 @@ export async function loadStatisticsDataset(): Promise<StatisticsDataset> {
       notes,
       "Table intervenant_daily_checklists indisponible : les KPI de suivi terrain sont partiels.",
     ),
+    (supabase as any).from("chantier_budget_settings").select("chantier_id,taux_horaire_mo_ht"),
   ]);
 
+  const chantierLaborRates: Record<string, number> = {};
+  if (budgetRatesRes.error) {
+    if (!isMissingRelationError(budgetRatesRes.error, "chantier_budget_settings")) throw budgetRatesRes.error;
+    notes.push("Taux chantier indisponibles : le coût de secours à 48 €/h sera utilisé.");
+  } else {
+    for (const row of budgetRatesRes.data ?? []) {
+      const rate = normalizeNumber(row.taux_horaire_mo_ht);
+      if (rate !== null && rate > 0) chantierLaborRates[String(row.chantier_id)] = rate;
+    }
+  }
   const activeChantierIds = new Set(chantiers.map((chantier) => chantier.id));
   const isActiveChantierRow = (row: { chantier_id?: string | null }) =>
     Boolean(row.chantier_id && activeChantierIds.has(row.chantier_id));
@@ -470,5 +496,6 @@ export async function loadStatisticsDataset(): Promise<StatisticsDataset> {
       dailyChecklists: dailyChecklistsRes.available,
     },
     notes,
+    chantierLaborRates,
   };
 }
