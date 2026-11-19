@@ -33,4 +33,4 @@ jobs:
       - name: TypeScript and Vite build
         run: npm run build
       - name: Targeted ESLint
-        run: npx eslint src/components/intervenants/IntervenantFormFields.tsx src/pages/IntervenantsPage.tsx src/pages/IntervenantDetailPage.tsx src/services/intervenantCosts.service.ts src/services/chantierBudget.service.ts src/services/indirectCosts.service.ts
+        run: npx eslint src/components/intervenants/IntervenantFormFields.tsx src/components/intervenants/intervenantFormModel.ts src/pages/IntervenantsPage.tsx src/pages/IntervenantDetailPage.tsx src/services/intervenantCosts.service.ts src/services/chantierBudget.service.ts src/services/indirectCosts.service.ts
