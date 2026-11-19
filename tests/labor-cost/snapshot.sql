@@ -25,5 +25,8 @@ begin
  insert into public.chantier_time_entries(chantier_id,intervenant_id,work_date,duration_hours)
  values(site,c,'2026-11-19',7) returning hourly_cost_snapshot_ht into value;
  if value <> 48 then raise exception 'Expected fallback cost 48, got %',value; end if;
+ if (select hourly_cost_snapshot_source from public.chantier_time_entries where intervenant_id=c order by work_date desc limit 1) <> 'chantier' then
+   raise exception 'Expected explicit chantier fallback origin';
+ end if;
  raise notice 'Hourly snapshot migration tests passed';
 end $$;
