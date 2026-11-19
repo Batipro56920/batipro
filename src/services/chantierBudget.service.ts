@@ -37,6 +37,16 @@ export type ChantierLaborCostSummary = {
   usesDefaultRate: boolean;
 };
 
+export type ChantierBudgetTaskRow = {
+  taskId: string | null;
+  title: string;
+  lot: string;
+  plannedHours: number;
+  actualHours: number;
+  plannedLaborCostHt: number;
+  actualLaborCostHt: number;
+};
+
 export type ChantierBudgetDashboard = {
   settings: ChantierBudgetSettingsRow;
   settingsSchemaReady: boolean;
@@ -59,6 +69,7 @@ export type ChantierBudgetDashboard = {
   depassementBudgetHt: number;
   alertes: string[];
   lots: ChantierBudgetLotRow[];
+  taskLabor: ChantierBudgetTaskRow[];
   achats: ChantierPurchaseRequestRow[];
 };
 
@@ -307,6 +318,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   const taskById = new Map(tasks.map((task) => [task.id, task]));
   const settings = settingsResult.settings;
   const lotsMap = new Map<string, ChantierBudgetLotRow>();
+  const taskLaborMap = new Map<string, ChantierBudgetTaskRow>();
   const individualRateById = configuredWorkerRates(intervenants);
   let hoursUsingChantierRate = 0;
 
@@ -328,9 +340,22 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   }
 
   tasks.forEach((task) => {
-    const lotRow = ensureLot(resolveTaskLot(task));
-    lotRow.temps_prevu_h += normalizeNumber(task.temps_prevu_h);
-    lotRow.cout_mo_prevu_ht += normalizeNumber(task.temps_prevu_h) * settings.taux_horaire_mo_ht;
+    const lot = resolveTaskLot(task);
+    const lotRow = ensureLot(lot);
+    const plannedHours = normalizeNumber(task.temps_prevu_h);
+    const estimatedLabor = normalizeNumber(task.cout_mo_estime_ht);
+    const plannedLaborCostHt = estimatedLabor > 0 ? estimatedLabor : plannedHours * settings.taux_horaire_mo_ht;
+    lotRow.temps_prevu_h += plannedHours;
+    lotRow.cout_mo_prevu_ht += plannedLaborCostHt;
+    taskLaborMap.set(task.id, {
+      taskId: task.id,
+      title: task.titre || "Tâche",
+      lot,
+      plannedHours,
+      actualHours: 0,
+      plannedLaborCostHt,
+      actualLaborCostHt: 0,
+    });
   });
 
   timeEntries.forEach((entry) => {
@@ -344,6 +369,14 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
       hourly_cost_snapshot_ht: entry.hourly_cost_snapshot_ht,
     }, individualRateById, settings.taux_horaire_mo_ht);
     lotRow.cout_mo_reel_ht += valuation.laborCostHt;
+    const key = task?.id ?? "__unassigned__";
+    const currentTask = taskLaborMap.get(key) ?? {
+      taskId: null, title: "Heures sans tâche", lot: resolveTaskLot(undefined),
+      plannedHours: 0, actualHours: 0, plannedLaborCostHt: 0, actualLaborCostHt: 0,
+    };
+    currentTask.actualHours += valuation.hours;
+    currentTask.actualLaborCostHt += valuation.laborCostHt;
+    taskLaborMap.set(key, currentTask);
     hoursUsingChantierRate += valuation.hoursUsingChantierRate;
   });
 
@@ -420,6 +453,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     depassementBudgetHt,
     alertes,
     lots,
+    taskLabor: [...taskLaborMap.values()].sort((a,b) => b.actualLaborCostHt - a.actualLaborCostHt),
     achats: purchaseResult.requests,
   };
 }
