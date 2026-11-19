@@ -1,0 +1,65 @@
+name: Planning PR checks
+on:
+  pull_request:
+    paths:
+      - "src/features/planning/**"
+      - "src/pages/CentralPlanningPage.tsx"
+      - "src/pages/EmployeePortalV2Page.tsx"
+      - "src/services/officeWorkerPlanning.service.ts"
+      - "src/services/chantierPlanningCalendar.service.ts"
+      - "supabase/migrations/20261108*.sql"
+      - ".github/workflows/planning-checks.yml"
+      - "tests/planning/**"
+  push:
+    branches:
+      - feat/planning-worker-cross-chantier-20261108
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Planning unit tests
+        run: node --experimental-strip-types --test src/features/planning/officePlanningConflicts.test.mjs
+      - name: TypeScript and Vite build
+        run: npm run build
+      - name: Targeted ESLint
+        run: npx eslint src/features/planning/officePlanningConflicts.ts src/pages/CentralPlanningPage.tsx src/pages/EmployeePortalV2Page.tsx src/services/officeWorkerPlanning.service.ts src/services/chantierPlanningCalendar.service.ts
+  sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: planning_test
+          POSTGRES_USER: postgres
+          POSTGRES_DB: planning_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d planning_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: planning_test
+      PGDATABASE: planning_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Mock current Batipro schema
+        run: psql -v ON_ERROR_STOP=1 -f tests/planning/fixture.sql
+      - name: Apply prepared office guard
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108150000_office_planning_cross_chantier_guard.sql
+      - name: Apply prepared reciprocal triggers
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108160000_task_segments_office_conflict_guard.sql
+      - name: Assert planning conflicts
+        run: psql -v ON_ERROR_STOP=1 -f tests/planning/conflicts.sql
