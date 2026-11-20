@@ -8,6 +8,9 @@ import { listIntervenants } from "./intervenants.service";
 import { configuredWorkerRates, sumLaborValues, valueLaborEntry } from "./laborCostValuation.service";
 import { getChantierMaterialCost } from "./productStock.service";
 import { getCompanyHourlyRates } from "./indirectCosts.service";
+import { list as listTaskTemplates } from "./taskLibrary.service";
+import { listTaskTemplatePreparationByTemplateIds } from "./taskTemplatePreparation.service";
+import { computeTechnicalTaskCost, type TechnicalTaskCost } from "./designationTechnicalCosts.service";
 
 export type ChantierBudgetSettingsRow = {
   chantier_id: string;
@@ -46,6 +49,7 @@ export type ChantierBudgetTaskRow = {
   actualHours: number;
   plannedLaborCostHt: number;
   actualLaborCostHt: number;
+  plannedCostComplete: boolean;
 };
 
 export type ChantierBudgetDashboard = {
@@ -63,7 +67,14 @@ export type ChantierBudgetDashboard = {
   achatsSaisisHt: number;
   /** Coût matières venant des mouvements de stock rattachés au chantier. */
   achatsLivresHt: number;
+  achatsRapprochementRequis: boolean;
   coutPrevuHt: number;
+  /** Null until all technical tasks are linked to priced templates. */
+  coutTechniquePrevuHt: number | null;
+  previsionTechniqueComplete: boolean;
+  previsionTechniqueManquants: string[];
+  /** Real cost including overheads where the company rates are configured. */
+  coutReelCompletHt: number | null;
   coutReelHt: number;
   margePrevueHt: number;
   margeReelleHt: number;
@@ -320,6 +331,37 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
       return sum + quantite * prixUnitaire;
     }, 0);
 
+  const [templates, prep] = await (async () => {
+    const templates = await listTaskTemplates();
+    const prep = await listTaskTemplatePreparationByTemplateIds(templates.map((template) => template.id));
+    return [templates, prep] as const;
+  })();
+  const templateMap = new Map(templates.map((template) => [template.id, template]));
+  const technicalCosts = new Map<string, TechnicalTaskCost>();
+  const previsionTechniqueManquants: string[] = [];
+  for (const task of tasks) {
+    const cost = computeTechnicalTaskCost(
+      task, templateMap,
+      prep.schemaReady ? prep.materialsByTemplateId : {},
+      prep.schemaReady ? prep.equipmentByTemplateId : {},
+      prep.schemaReady ? companyRates : null,
+    );
+    technicalCosts.set(task.id, cost);
+    if (cost.status === "incomplete") {
+      previsionTechniqueManquants.push(`${task.titre_terrain || task.titre} : ${cost.reason ?? "chiffrage incomplet"}`);
+    }
+  }
+  if (!prep.schemaReady) previsionTechniqueManquants.push("Ratios de bibliothèque indisponibles");
+  // A sold designation without a technical task is not a zero-cost service.
+  // Only priced lines count: section headings and informational rows have no cost.
+  for (const line of devisLignesGroups.flat()) {
+    const saleAmount = normalizeNumber(line.quantite) * normalizeNumber(line.prix_unitaire_ht);
+    if (saleAmount > 0 && !tasks.some((task) => task.devis_ligne_id === line.id)) {
+      previsionTechniqueManquants.push(`Désignation sans tâche technique : ${line.designation}`);
+    }
+  }
+  const previsionTechniqueComplete = prep.schemaReady && tasks.length > 0 && previsionTechniqueManquants.length === 0;
+
   const taskById = new Map(tasks.map((task) => [task.id, task]));
   const settings = settingsResult.settings;
   const lotsMap = new Map<string, ChantierBudgetLotRow>();
@@ -349,11 +391,16 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   tasks.forEach((task) => {
     const lot = resolveTaskLot(task);
     const lotRow = ensureLot(lot);
-    const plannedHours = normalizeNumber(task.temps_prevu_h);
-    const estimatedLabor = normalizeNumber(task.cout_mo_estime_ht);
-    const plannedLaborCostHt = estimatedLabor > 0 ? estimatedLabor : plannedHours * settings.taux_horaire_mo_ht;
+    const technical = technicalCosts.get(task.id);
+    const plannedHours = technical?.status === "calculated" ? technical.hours : normalizeNumber(task.temps_prevu_h);
+    const plannedLaborCostHt = technical?.status === "calculated" ? technical.laborHt : 0;
     lotRow.temps_prevu_h += plannedHours;
     lotRow.cout_mo_prevu_ht += plannedLaborCostHt;
+    if (technical?.status === "calculated") {
+      // Materials, consumables and dedicated equipment form the non-labor
+      // technical forecast. Purchase requests are not added a second time.
+      lotRow.achats_prevus_ht += technical.materialsHt + technical.consumablesHt + technical.equipmentHt;
+    }
     taskLaborMap.set(task.id, {
       taskId: task.id,
       title: task.titre || "Tâche",
@@ -362,6 +409,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
       actualHours: 0,
       plannedLaborCostHt,
       actualLaborCostHt: 0,
+      plannedCostComplete: technical?.status === "calculated",
     });
   });
 
@@ -380,7 +428,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     const key = task?.id ?? "__unassigned__";
     const currentTask = taskLaborMap.get(key) ?? {
       taskId: null, title: "Heures sans tâche", lot: resolveTaskLot(undefined),
-      plannedHours: 0, actualHours: 0, plannedLaborCostHt: 0, actualLaborCostHt: 0,
+      plannedHours: 0, actualHours: 0, plannedLaborCostHt: 0, actualLaborCostHt: 0, plannedCostComplete: false,
     };
     currentTask.actualHours += valuation.hours;
     currentTask.actualLaborCostHt += valuation.laborCostHt;
@@ -392,7 +440,8 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   purchaseResult.requests.forEach((request) => {
     const task = request.task_id ? taskById.get(request.task_id) : undefined;
     const lotRow = ensureLot(resolveTaskLot(task));
-    lotRow.achats_prevus_ht += normalizeNumber((request as any).cout_prevu_ht);
+    // Planned resources are sourced from the task template. A purchase
+    // request is the execution of that plan, never another planned expense.
     lotRow.achats_reels_ht += normalizeNumber((request as any).cout_reel_ht);
   });
 
@@ -426,9 +475,16 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   // Les bons de livraison lus sur le terrain s'ajoutent aux achats saisis au
   // bureau : ce sont deux sources distinctes du meme cout matieres.
   const achatsLivresHt = normalizeNumber(materialCostHt);
+  // Manual purchase request costs and the stock/delivery ledger may reflect
+  // the same invoice. They have no shared document id in this schema.
+  // Keep their separate totals but do not certify a combined real margin.
+  const achatsRapprochementRequis = achatsSaisisHt > 0 && achatsLivresHt > 0;
   const achatsReelsHt = achatsSaisisHt + achatsLivresHt;
   const coutPrevuHt = coutMoPrevuHt + achatsPrevusHt;
+  const coutTechniquePrevuHt = previsionTechniqueComplete ? coutPrevuHt : null;
   const coutReelHt = coutMoReelHt + achatsReelsHt;
+  const coutReelCompletHt = coutMoReelCompletHt === null || achatsRapprochementRequis
+    ? null : coutMoReelCompletHt + achatsReelsHt;
   const margePrevueHt = chiffreAffairesPrevuHt - coutPrevuHt;
   const margeReelleHt = chiffreAffairesPrevuHt - coutReelHt;
   const margePrevuePct = safePct(margePrevueHt, chiffreAffairesPrevuHt);
@@ -461,7 +517,12 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     achatsReelsHt,
     achatsSaisisHt,
     achatsLivresHt,
+    achatsRapprochementRequis,
     coutPrevuHt,
+    coutTechniquePrevuHt,
+    previsionTechniqueComplete,
+    previsionTechniqueManquants,
+    coutReelCompletHt,
     coutReelHt,
     margePrevueHt,
     margeReelleHt,

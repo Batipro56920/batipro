@@ -31,6 +31,7 @@ import {
   listChantierLaborCostSummaries,
   type ChantierLaborCostSummary,
 } from "../services/chantierBudget.service";
+import { listChantierTechnicalForecasts, type ChantierTechnicalForecast } from "../services/designationTechnicalCosts.service";
 import type { ProjectRecord } from "../features/projects/types";
 import {
   getCompanySettings,
@@ -335,18 +336,24 @@ function ProjectProfitabilityPanel({
   loading,
   error,
   laborError,
+  technicalForecasts,
+  technicalLoading,
+  technicalError,
 }: {
   rows: ProjectFinancialRow[];
   loading: boolean;
   error: string | null;
   laborError: string | null;
+  technicalForecasts: Map<string, ChantierTechnicalForecast>;
+  technicalLoading: boolean;
+  technicalError: string | null;
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-4">
-        <h2 className="font-semibold text-slate-950">Marge après main-d'œuvre par dossier</h2>
+        <h2 className="font-semibold text-slate-950">Rentabilité documentaire et prévision technique</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Les dossiers nécessitant une action remontent en premier : rattachement manquant, achats sans vente ou marge après main-d'œuvre négative.
+          Les coûts techniques proviennent des modèles de tâches. La marge documentaire est calculée séparément à partir des factures, commandes et heures pointées.
         </p>
       </div>
       {loading ? <div className="p-6 text-sm text-slate-500">Chargement des rattachements projets...</div> : null}
@@ -362,7 +369,7 @@ function ProjectProfitabilityPanel({
       ) : null}
       {!loading && !error ? (
         <div className="overflow-x-auto p-4">
-          <table className="min-w-[1360px] text-sm">
+          <table className="min-w-[1480px] text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Dossier</th>
@@ -371,6 +378,7 @@ function ProjectProfitabilityPanel({
                 <th className="px-4 py-3 text-right font-medium">Heures</th>
                 <th className="px-4 py-3 text-right font-medium">Ventes HT</th>
                 <th className="px-4 py-3 text-right font-medium">Achats HT</th>
+                <th className="px-4 py-3 text-right font-medium">Coût technique prévu HT</th>
                 <th className="px-4 py-3 text-right font-medium">MO réelle</th>
                 <th className="px-4 py-3 text-right font-medium">Marge après MO</th>
                 <th className="px-4 py-3 text-right font-medium">Taux</th>
@@ -384,6 +392,11 @@ function ProjectProfitabilityPanel({
                   : null;
                 const marginTone = row.marginAfterLaborHt < 0 ? "text-red-700" : "text-emerald-700";
                 const signal = getProjectSignal(row);
+                const costRows = row.chantierIds.map((id) => technicalForecasts.get(id));
+                const technicalComplete = costRows.length > 0 && costRows.every((item) => item && item.costHt !== null);
+                const technicalCost = technicalComplete
+                  ? costRows.reduce((sum, item) => sum + (item?.costHt ?? 0), 0) : null;
+                const missingTechnical = costRows.reduce((sum, item) => sum + (item?.missing.length ?? 0), 0);
                 return (
                   <tr key={row.key} className="border-t border-slate-100">
                     <td className="px-4 py-3">
@@ -425,6 +438,11 @@ function ProjectProfitabilityPanel({
                     </td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.invoicedHt)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.purchasesHt)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">
+                      {technicalLoading ? "Chargement…" : technicalComplete && technicalCost !== null ? formatCurrency(technicalCost) : "Non chiffré"}
+                      {!technicalLoading && !technicalComplete && !technicalError && row.chantierIds.length > 0 &&
+                        <div className="mt-0.5 text-[11px] text-slate-500">{missingTechnical} élément(s) à compléter</div>}
+                    </td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.laborCostHt)}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${marginTone}`}>{formatCurrency(row.marginAfterLaborHt)}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${marginTone}`}>{formatRate(row.marginAfterLaborRate)}</td>
@@ -433,14 +451,14 @@ function ProjectProfitabilityPanel({
                 );
               })}
               {!rows.length ? (
-                <tr><td colSpan={10} className="px-4 py-8 text-center text-slate-500">Aucun document financier sur cette période.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-slate-500">Aucun document financier sur cette période.</td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
       ) : null}
       <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-        Marge après MO = ventes HT émises - commandes fournisseurs HT engagées - coût des heures saisies. Les heures utilisent le coût horaire de l'intervenant lorsqu'il est renseigné, sinon le taux du chantier. Elle n'inclut pas les frais chantier non saisis ni les paiements fournisseurs.
+        Le coût technique prévu couvre les tâches chiffrées par la bibliothèque, quelle que soit la période sélectionnée. Il n'est pas additionné aux achats ou aux coûts documentaires. La marge après MO reste une lecture distincte des factures, commandes et heures.
       </div>
     </section>
   );
@@ -474,6 +492,9 @@ export default function RentabilitePage() {
   const [investments, setInvestments] = useState<CompanyInvestmentEntry[]>([]);
   const [laborCosts, setLaborCosts] = useState<Map<string, ChantierLaborCostSummary>>(() => new Map());
   const [laborLoading, setLaborLoading] = useState(false);
+  const [technicalForecasts, setTechnicalForecasts] = useState<Map<string, ChantierTechnicalForecast>>(() => new Map());
+  const [technicalLoading, setTechnicalLoading] = useState(false);
+  const [technicalError, setTechnicalError] = useState<string | null>(null);
   const [laborError, setLaborError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -531,6 +552,27 @@ export default function RentabilitePage() {
       alive = false;
     };
   }, [period, projects]);
+
+  useEffect(() => {
+    const ids = Array.from(new Set(projects.flatMap((project) => project.chantiers.map((chantier) => chantier.id))));
+    if (ids.length === 0) {
+      setTechnicalForecasts(new Map());
+      setTechnicalLoading(false);
+      return;
+    }
+    let active = true;
+    setTechnicalLoading(true);
+    setTechnicalError(null);
+    void listChantierTechnicalForecasts(ids)
+      .then((rows) => { if (active) setTechnicalForecasts(new Map(rows.map((row) => [row.chantierId, row]))); })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setTechnicalForecasts(new Map());
+        setTechnicalError(err instanceof Error ? err.message : "Prévisions techniques indisponibles");
+      })
+      .finally(() => { if (active) setTechnicalLoading(false); });
+    return () => { active = false; };
+  }, [projects]);
 
   const scopedInvoices = useMemo(() => invoices.filter((invoice) => isInFinancialPeriod(invoice.document.issueDate, period)), [invoices, period]);
   const scopedPurchaseOrders = useMemo(() => purchaseOrders.filter((order) => isInFinancialPeriod(order.document.issueDate || order.createdAt, period)), [period, purchaseOrders]);
@@ -615,6 +657,9 @@ export default function RentabilitePage() {
             loading={projectsLoading || laborLoading}
             error={projectsError}
             laborError={laborError}
+            technicalForecasts={technicalForecasts}
+            technicalLoading={technicalLoading}
+            technicalError={technicalError}
           />
 
           <section className="grid gap-4 xl:grid-cols-2">

@@ -10,10 +10,8 @@ import {
   type TaskLine,
 } from "../../services/devisTasksExtraction.service";
 import { createDevis, createDevisLigne, deleteDevis, deleteDevisLigne } from "../../services/devis.service";
-import { createTask, deleteTasksByIds } from "../../services/chantierTasks.service";
-import { deleteDocument, linkDocumentToTask, uploadDocument } from "../../services/chantierDocuments.service";
+import { deleteDocument, uploadDocument } from "../../services/chantierDocuments.service";
 import { generateTerrainTaskTitle } from "../../services/taskTerrainTitlesOperational.service";
-import { loadTaskTemplateUnitCosts } from "../../services/taskTemplateComputedCost";
 import {
   findBestTaskTemplateMatch,
   list as listTaskLibraryTemplates,
@@ -97,7 +95,6 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
   const [mode, setMode] = useState<ImportMode>("AI");
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [taskLibraryTemplates, setTaskLibraryTemplates] = useState<TaskTemplateRow[]>([]);
-  const [templateUnitCosts, setTemplateUnitCosts] = useState<Map<string, number>>(new Map());
   const [bulkIntervenantId, setBulkIntervenantId] = useState("__NONE__");
   const [bulkToast, setBulkToast] = useState<string | null>(null);
   const bulkToastTimerRef = useRef<number | null>(null);
@@ -126,9 +123,6 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
         const templates = await listTaskLibraryTemplates();
         if (!alive) return;
         setTaskLibraryTemplates(templates);
-        const costs = await loadTaskTemplateUnitCosts(templates).catch(() => new Map<string, number>());
-        if (!alive) return;
-        setTemplateUnitCosts(costs);
       } catch {
         if (!alive) return;
         setTaskLibraryTemplates([]);
@@ -214,11 +208,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
           showSource: false,
           task_template_id: matchedTemplate?.id ?? null,
           task_template_label: matchedTemplate?.titre ?? line.task_template_label ?? null,
-          estimated_cost_ht:
-            line.estimated_cost_ht ??
-            (matchedTemplate && line.quantity !== null && (templateUnitCosts.get(matchedTemplate.id) ?? 0) > 0
-              ? Math.round((templateUnitCosts.get(matchedTemplate.id) ?? 0) * line.quantity * 100) / 100
-              : null),
+          estimated_cost_ht: null,
         };
       });
 
@@ -340,7 +330,6 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
 
     let createdDevisId: string | null = null;
     let createdDocument: { id: string; storage_path?: string | null } | null = null;
-    const createdTaskIds: string[] = [];
     const createdDevisLigneIds: string[] = [];
 
     try {
@@ -372,69 +361,25 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
           quantite: row.quantity,
           prix_unitaire_ht: row.unit_price_ht,
           tva_rate: row.vat_rate,
-          generer_tache: true,
-          titre_tache: row.title,
+          generer_tache: false,
+          titre_tache: null,
           date_prevue: row.date,
         });
         createdDevisLigneIds.push(createdLigne.id);
         ordre += 1;
 
-        // If the imported unit is hours, reuse quantity as planned hours
-        // so automatic progress works immediately after import.
-        const plannedHours =
-          row.unit === "h" && typeof row.quantity === "number" && row.quantity > 0
-            ? row.quantity
-            : 1;
-
-        const createdTask = await createTask({
-          chantier_id: chantierId,
-          titre: row.title,
-          titre_terrain: row.title,
-          task_template_id: row.task_template_id,
-          task_template_label: row.task_template_label ?? row.title,
-          description_technique: row.description_technique,
-          caracteristiques: row.caracteristiques,
-          libelle_devis_original: row.source_line,
-          devis_ligne_id: createdLigne.id,
-          corps_etat: row.lot,
-          date: row.date,
-          status: "A_FAIRE",
-          intervenant_id: row.intervenant_id,
-          quantite: row.quantity ?? 1,
-          unite: row.unit,
-          temps_prevu_h: plannedHours,
-          prix_unitaire_devis_ht: row.unit_price_ht,
-          montant_total_devis_ht:
-            row.total_price_ht ??
-            (row.unit_price_ht !== null && row.quantity !== null
-              ? Math.round(row.unit_price_ht * row.quantity * 100) / 100
-              : null),
-          tva_taux_devis: row.vat_rate,
-          cout_estime_ht: row.estimated_cost_ht,
-          cout_matiere_estime_ht: row.estimated_material_cost_ht,
-          cout_mo_estime_ht: row.estimated_labor_cost_ht,
-        });
-        createdTaskIds.push(createdTask.id);
-
-        await linkDocumentToTask(createdTask.id, createdDoc.id);
       }
 
       await onImported({
         devisId: createdDevis.id,
         linesInserted: selectedRows.length,
-        tasksCreated: createdTaskIds.length,
+        tasksCreated: 0,
         documentId: createdDoc.id,
         mode,
       });
       onClose();
     } catch (err: any) {
       const cleanupErrors: string[] = [];
-
-      try {
-        if (createdTaskIds.length) await deleteTasksByIds(createdTaskIds);
-      } catch (cleanupErr: any) {
-        cleanupErrors.push(`Rollback tâches: ${cleanupErr?.message ?? cleanupErr}`);
-      }
 
       try {
         if (createdDocument?.id) await deleteDocument(createdDocument.id, createdDocument.storage_path ?? null);
@@ -456,7 +401,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
         cleanupErrors.push(`Rollback devis: ${cleanupErr?.message ?? cleanupErr}`);
       }
 
-      const baseMessage = err?.message ?? "Erreur création devis/tâches.";
+      const baseMessage = err?.message ?? "Erreur d'import des désignations.";
       setError(cleanupErrors.length ? `${baseMessage} (${cleanupErrors.join(" | ")})` : baseMessage);
     } finally {
       setCreating(false);
@@ -770,7 +715,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
                 onClick={onCreateTasks}
                 disabled={creating}
               >
-                {creating ? "Création..." : `Créer ${includedCount} tâche(s)`}
+                {creating ? "Import..." : `Importer ${includedCount} désignation(s)`}
               </button>
             )}
           </div>
