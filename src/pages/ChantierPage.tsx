@@ -209,7 +209,6 @@ import ChantierPreparationSection from "../features/chantiers/pages/ChantierPrep
 import ChantierMaterialsSection from "../features/chantiers/pages/ChantierMaterialsSection";
 import ChantierPurchasesSection from "../features/chantiers/pages/ChantierPurchasesSection";
 import ChantierReservesSection from "../features/chantiers/pages/ChantierReservesSection";
-import ChantierTasksQuotesSection from "../features/chantiers/pages/ChantierTasksQuotesSection";
 import ChantierTimeSection from "../features/chantiers/pages/ChantierTimeSection";
 import ChantierUnforeseenSection from "../features/chantiers/pages/ChantierUnforeseenSection";
 import ChantierVisitSection from "../features/chantiers/pages/ChantierVisitSection";
@@ -6521,10 +6520,51 @@ export default function ChantierPage() {
 
         {/* ---------------- ONGLET DEVIS & TACHES ---------------- */}
         {detailSection === "execution" && (
-          <ChantierTasksQuotesSection>
-          <div className="space-y-8">
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-600">Production · tâches chantier</div>
+                  <h2 className="mt-1 text-xl font-bold text-slate-950">Suivre les travaux</h2>
+                  <p className="mt-1 max-w-2xl text-sm text-slate-600">
+                    Les tâches créées dans Préparer sont les mêmes qu'ici : on les retrouve pour
+                    affecter les équipes, enregistrer les heures, suivre l'avancement et les contrôler.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setTaskCreateDrawerOpen(true)}
+                    className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+                    + Ajouter une tâche
+                  </button>
+                  <a href="#chantier-devis" className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    Voir les devis
+                  </a>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl bg-blue-50 p-3">
+                  <div className="text-xs font-medium text-blue-800">Tâches du chantier</div>
+                  <div className="mt-1 text-2xl font-bold text-blue-950">{tasksLoading ? "…" : tasks.length}</div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-xs font-medium text-slate-600">En cours</div>
+                  <div className="mt-1 text-2xl font-bold text-slate-950">{tasksLoading ? "…" : tasks.filter((task) => task.status === "EN_COURS").length}</div>
+                </div>
+                <div className="rounded-xl bg-emerald-50 p-3">
+                  <div className="text-xs font-medium text-emerald-700">Terminées</div>
+                  <div className="mt-1 text-2xl font-bold text-emerald-950">{tasksLoading ? "…" : tasks.filter((task) => task.status === "FAIT").length}</div>
+                </div>
+              </div>
+              {tasks.length > 0 && filteredTasks.length === 0 && !tasksLoading && (
+                <button type="button" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                  onClick={() => { setFilterIntervenant("__ALL__"); setFilterTaskQuality("__ALL__"); }}>
+                  Les filtres masquent les {tasks.length} tâches. Afficher toutes les tâches
+                </button>
+              )}
+            </section>
+            <div className="flex flex-col gap-6">
             {/* DEVIS */}
-            <section className="space-y-4">
+            <section id="chantier-devis" className="order-2 scroll-mt-28 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold">{t("chantierPage.quotesTitle")}</div>
@@ -6685,8 +6725,8 @@ export default function ChantierPage() {
               </div>
             </section>
 
-            {/* TACHES */}
-            <section className="space-y-4">
+            {/* TACHES : même référentiel Supabase que la préparation, affiché en premier */}
+            <section id="chantier-taches" className="order-1 scroll-mt-28 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex justify-between">
                 <div>
                   <div className="font-semibold section-title">{t("chantierPage.tasks")}</div>
@@ -7074,6 +7114,11 @@ export default function ChantierPage() {
                 </div>
               )}
 
+              {!tasksLoading && !tasksError && tasks.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+                  Aucune tâche enregistrée sur ce chantier. Créez la première tâche ici ou importez un devis pour générer les travaux.
+                </div>
+              )}
               <div className="space-y-2">
                 {filteredTasks.map((t: any) => {
                   const isEditing = editingTaskId === t.id;
@@ -7593,8 +7638,8 @@ export default function ChantierPage() {
                 })}
               </div>
             </section>
+            </div>
           </div>
-          </ChantierTasksQuotesSection>
         )}
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
