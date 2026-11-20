@@ -3357,12 +3357,6 @@ export default function ChantierPage() {
     setTaskProgressDrafts((prev) => ({ ...prev, [taskId]: normalized }));
   }
 
-  function startTaskProgressEdit(task: ChantierTaskRow) {
-    const progress = computeTaskProgress(task);
-    setTaskProgressDrafts((prev) => ({ ...prev, [task.id]: String(progress.offsetPercent ?? 0) }));
-    setTaskProgressEditingId(task.id);
-  }
-
   function cancelTaskProgressEdit(task: ChantierTaskRow) {
     const progress = computeTaskProgress(task);
     setTaskProgressDrafts((prev) => ({ ...prev, [task.id]: String(progress.offsetPercent ?? 0) }));
