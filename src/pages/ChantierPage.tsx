@@ -5921,14 +5921,6 @@ export default function ChantierPage() {
             }))}
           />
         )}
-        {detailSection === "execution" && id && (
-          <ChantierNotesSection
-            chantierId={id}
-            tasks={tasks}
-            zones={zones}
-            documents={documents}
-          />
-        )}
         {detailSection === "financier" && (
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
             Suivi financier — budget, achats, imprévus
@@ -7649,6 +7641,14 @@ export default function ChantierPage() {
             </section>
             </div>
           </div>
+        )}
+        {detailSection === "execution" && id && (
+          <ChantierNotesSection
+            chantierId={id}
+            tasks={tasks}
+            zones={zones}
+            documents={documents}
+          />
         )}
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
