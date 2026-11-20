@@ -5894,7 +5894,7 @@ export default function ChantierPage() {
       <div
         className={[
           "rounded-surface border border-subtle bg-surface p-4 shadow-sm",
-          detailSection === "execution" ? "pb-24" : "",
+          
         ].filter(Boolean).join(" ")}
       >
         {detailSection === "cockpit" && accueilPanel}
@@ -6578,170 +6578,8 @@ export default function ChantierPage() {
               )}
             </section>
             <div className="flex flex-col gap-6">
-            {/* DEVIS */}
-            <section id="chantier-devis" className="order-2 scroll-mt-28 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="font-semibold">{t("chantierPage.quotesTitle")}</div>
-                  <div className="text-sm text-slate-500">{t("chantierPage.quotesSubtitle")}</div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-xs text-slate-500">{devisLoading ? t("common.states.loading") : `${devis.length} ${t("chantierPage.quotesCount")}`}</div>
-                  <button
-                    type="button"
-                    className="rounded-xl bg-[#2563EB] px-4 py-2 text-sm text-white hover:bg-[#1d4ed8]"
-                    onClick={() => setDevisImportDrawerOpen(true)}
-                  >
-                    {t("chantierPage.importQuotePdf")}
-                  </button>
-                </div>
-              </div>
-
-              {devisError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {devisError}
-                </div>
-              )}
-
-              <div className="rounded-xl border bg-blue-50/50 p-4 text-sm text-slate-700">
-                {t("chantierPage.quoteHelpPrefix")} <span className="font-semibold">{t("chantierPage.importQuotePdf")}</span> {t("chantierPage.quoteHelpSuffix")}
-              </div>
-
-              <div className="space-y-3">
-                {devis.map((d: any) => {
-                  const isOpen = activeDevisId === d.id;
-                  return (
-                    <div key={d.id} className="rounded-xl border p-4 space-y-3">
-                      <div className="flex justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium truncate">{d.nom ?? t("chantierPage.quoteFallback")}</div>
-                          <div className="text-xs text-slate-500">ID : {d.id}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                            onClick={() => setActiveDevisId(isOpen ? null : d.id)}
-                          >
-                            {isOpen ? t("common.actions.close") : t("chantierPage.viewLines")}
-                          </button>
-                        </div>
-                      </div>
-
-                      {isOpen && (
-                        <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
-                          {lignesError && (
-                            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                              {lignesError}
-                            </div>
-                          )}
-
-                          {lignesLoading ? (
-                            <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
-                          ) : lignes.length === 0 ? (
-                            <div className="text-sm text-slate-500">{t("chantierPage.noLine")}</div>
-                          ) : (
-                            <div className="space-y-2">
-                              {lignes.map((l: any) => (
-                                <div key={l.id} className="flex justify-between items-start border-b py-2 text-sm gap-3">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="font-medium">{l.designation}</div>
-                                    {l.titre_tache ? (
-                                      <div className="mt-1 text-xs font-medium text-blue-700">Titre terrain: {l.titre_tache}</div>
-                                    ) : null}
-                                    <div className="text-xs text-slate-500">
-                                      {(l.corps_etat ?? "—")} {" • "}
-                                      {l.entreprise ?? "—"} {" • "}
-                                      {(l.quantite ?? "—")} {(l.unite ?? "")}
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => onDeleteLigne(l.id)}
-                                    className="text-red-600 text-xs hover:underline"
-                                  >
-                                    {t("common.actions.delete")}
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Ajouter une ligne */}
-                          <div className="pt-2">
-                            <div className="font-semibold text-sm">{t("chantierPage.addLine")}</div>
-                            <form onSubmit={onAddLigne} className="mt-2 grid gap-2">
-                              <div className="grid gap-2 md:grid-cols-2">
-                                <input
-                                  className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder={t("chantierPage.lotPlaceholder")}
-                                  value={lCorpsEtat}
-                                  onChange={(e) => setLCorpsEtat(e.target.value)}
-                                />
-                                <input
-                                  className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder={t("chantierPage.companyPlaceholder")}
-                                  value={lEntreprise}
-                                  onChange={(e) => setLEntreprise(e.target.value)}
-                                />
-                              </div>
-
-                              <input
-                                className="rounded-xl border px-3 py-2 text-sm"
-                                placeholder={t("chantierPage.designationPlaceholder")}
-                                value={lDesignation}
-                                onChange={(e) => setLDesignation(e.target.value)}
-                              />
-
-                              <div className="grid gap-2 md:grid-cols-3">
-                                <input
-                                  className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder={t("common.labels.unit")}
-                                  value={lUnite}
-                                  onChange={(e) => setLUnite(e.target.value)}
-                                />
-                                <input
-                                  className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder={t("common.labels.quantity")}
-                                  value={lQty}
-                                  onChange={(e) => setLQty(e.target.value)}
-                                />
-                                <label className="text-sm text-slate-700 flex items-center gap-2 justify-between">
-                                  <span className="flex items-center gap-2">
-                                    <input type="checkbox" checked={lGen} onChange={(e) => setLGen(e.target.checked)} />
-                                    {t("chantierPage.generateTask")}
-                                  </span>
-                                </label>
-                              </div>
-
-                              <div className="flex justify-end">
-                                <button
-                                  type="submit"
-                                  disabled={addingLigne}
-                                  className={[
-                                    "rounded-xl px-4 py-2 text-sm",
-                                    addingLigne ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
-                                  ].join(" ")}
-                                >
-                                  {addingLigne ? t("chantierPage.adding") : `+ ${t("chantierPage.addLine")}`}
-                                </button>
-                              </div>
-
-                              <div className="text-xs text-slate-500">
-                                {t("chantierPage.lineHelp")}
-                              </div>
-                            </form>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
             {/* TACHES : même référentiel Supabase que la préparation, affiché en premier */}
-            <section id="chantier-taches" className="order-1 scroll-mt-28 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <section id="chantier-taches" className="scroll-mt-28 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex justify-between">
                 <div>
                   <div className="font-semibold section-title">{t("chantierPage.tasks")}</div>
@@ -7653,6 +7491,169 @@ export default function ChantierPage() {
                 })}
               </div>
             </section>
+
+            {/* DEVIS */}
+            <section id="chantier-devis" className="scroll-mt-28 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold">{t("chantierPage.quotesTitle")}</div>
+                  <div className="text-sm text-slate-500">{t("chantierPage.quotesSubtitle")}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-slate-500">{devisLoading ? t("common.states.loading") : `${devis.length} ${t("chantierPage.quotesCount")}`}</div>
+                  <button
+                    type="button"
+                    className="rounded-xl bg-[#2563EB] px-4 py-2 text-sm text-white hover:bg-[#1d4ed8]"
+                    onClick={() => setDevisImportDrawerOpen(true)}
+                  >
+                    {t("chantierPage.importQuotePdf")}
+                  </button>
+                </div>
+              </div>
+
+              {devisError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {devisError}
+                </div>
+              )}
+
+              <div className="rounded-xl border bg-blue-50/50 p-4 text-sm text-slate-700">
+                {t("chantierPage.quoteHelpPrefix")} <span className="font-semibold">{t("chantierPage.importQuotePdf")}</span> {t("chantierPage.quoteHelpSuffix")}
+              </div>
+
+              <div className="space-y-3">
+                {devis.map((d: any) => {
+                  const isOpen = activeDevisId === d.id;
+                  return (
+                    <div key={d.id} className="rounded-xl border p-4 space-y-3">
+                      <div className="flex justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{d.nom ?? t("chantierPage.quoteFallback")}</div>
+                          <div className="text-xs text-slate-500">ID : {d.id}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                            onClick={() => setActiveDevisId(isOpen ? null : d.id)}
+                          >
+                            {isOpen ? t("common.actions.close") : t("chantierPage.viewLines")}
+                          </button>
+                        </div>
+                      </div>
+
+                      {isOpen && (
+                        <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
+                          {lignesError && (
+                            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                              {lignesError}
+                            </div>
+                          )}
+
+                          {lignesLoading ? (
+                            <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
+                          ) : lignes.length === 0 ? (
+                            <div className="text-sm text-slate-500">{t("chantierPage.noLine")}</div>
+                          ) : (
+                            <div className="space-y-2">
+                              {lignes.map((l: any) => (
+                                <div key={l.id} className="flex justify-between items-start border-b py-2 text-sm gap-3">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-medium">{l.designation}</div>
+                                    {l.titre_tache ? (
+                                      <div className="mt-1 text-xs font-medium text-blue-700">Titre terrain: {l.titre_tache}</div>
+                                    ) : null}
+                                    <div className="text-xs text-slate-500">
+                                      {(l.corps_etat ?? "—")} {" • "}
+                                      {l.entreprise ?? "—"} {" • "}
+                                      {(l.quantite ?? "—")} {(l.unite ?? "")}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => onDeleteLigne(l.id)}
+                                    className="text-red-600 text-xs hover:underline"
+                                  >
+                                    {t("common.actions.delete")}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Ajouter une ligne */}
+                          <div className="pt-2">
+                            <div className="font-semibold text-sm">{t("chantierPage.addLine")}</div>
+                            <form onSubmit={onAddLigne} className="mt-2 grid gap-2">
+                              <div className="grid gap-2 md:grid-cols-2">
+                                <input
+                                  className="rounded-xl border px-3 py-2 text-sm"
+                                  placeholder={t("chantierPage.lotPlaceholder")}
+                                  value={lCorpsEtat}
+                                  onChange={(e) => setLCorpsEtat(e.target.value)}
+                                />
+                                <input
+                                  className="rounded-xl border px-3 py-2 text-sm"
+                                  placeholder={t("chantierPage.companyPlaceholder")}
+                                  value={lEntreprise}
+                                  onChange={(e) => setLEntreprise(e.target.value)}
+                                />
+                              </div>
+
+                              <input
+                                className="rounded-xl border px-3 py-2 text-sm"
+                                placeholder={t("chantierPage.designationPlaceholder")}
+                                value={lDesignation}
+                                onChange={(e) => setLDesignation(e.target.value)}
+                              />
+
+                              <div className="grid gap-2 md:grid-cols-3">
+                                <input
+                                  className="rounded-xl border px-3 py-2 text-sm"
+                                  placeholder={t("common.labels.unit")}
+                                  value={lUnite}
+                                  onChange={(e) => setLUnite(e.target.value)}
+                                />
+                                <input
+                                  className="rounded-xl border px-3 py-2 text-sm"
+                                  placeholder={t("common.labels.quantity")}
+                                  value={lQty}
+                                  onChange={(e) => setLQty(e.target.value)}
+                                />
+                                <label className="text-sm text-slate-700 flex items-center gap-2 justify-between">
+                                  <span className="flex items-center gap-2">
+                                    <input type="checkbox" checked={lGen} onChange={(e) => setLGen(e.target.checked)} />
+                                    {t("chantierPage.generateTask")}
+                                  </span>
+                                </label>
+                              </div>
+
+                              <div className="flex justify-end">
+                                <button
+                                  type="submit"
+                                  disabled={addingLigne}
+                                  className={[
+                                    "rounded-xl px-4 py-2 text-sm",
+                                    addingLigne ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
+                                  ].join(" ")}
+                                >
+                                  {addingLigne ? t("chantierPage.adding") : `+ ${t("chantierPage.addLine")}`}
+                                </button>
+                              </div>
+
+                              <div className="text-xs text-slate-500">
+                                {t("chantierPage.lineHelp")}
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
             </div>
           </div>
         )}
