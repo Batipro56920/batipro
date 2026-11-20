@@ -1,8 +1,8 @@
-import type { ChantierTaskRow } from "./chantierTasks.service";
-import type { DevisLigneRow } from "./devis.service";
-import type { TaskTemplateRow } from "./taskLibrary.service";
-import type { CompanyHourlyRates } from "./indirectCosts.service";
-import type { TaskTemplateMaterialRatioRow, TaskTemplateEquipmentItemRow } from "./taskTemplatePreparation.service";
+import { getTasksByChantierId, type ChantierTaskRow } from "./chantierTasks.service";
+import { listDevisByChantier, listDevisLignes, type DevisLigneRow } from "./devis.service";
+import { list as listTaskTemplates, type TaskTemplateRow } from "./taskLibrary.service";
+import { getCompanyHourlyRates, type CompanyHourlyRates } from "./indirectCosts.service";
+import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateMaterialRatioRow, type TaskTemplateEquipmentItemRow } from "./taskTemplatePreparation.service";
 import { taskTemplateUnitCost } from "./taskCostBasis";
 
 /** One designation can have many technical tasks; one task belongs to at most one designation.
@@ -118,4 +118,55 @@ export function computeDesignationCost(
     marginHt: saleHt !== null && costHt !== null ? round(saleHt - costHt) : null,
     complete, linkedTasks: linked.length,
   };
+}
+
+/** Forecast uses the same task model as the chantier budget and designation panel.
+ * Grouped per chantier, with null for any missing input rather than an invented 0.
+ * No invoice, purchase order or historic task cost is counted here.
+ */
+export type ChantierTechnicalForecast = {
+  chantierId: string;
+  costHt: number | null;
+  technicalTasks: number;
+  missing: string[];
+};
+
+export async function listChantierTechnicalForecasts(chantierIds: string[]): Promise<ChantierTechnicalForecast[]> {
+  const ids = Array.from(new Set(chantierIds.filter(Boolean)));
+  if (ids.length === 0) return [];
+  const [templates, rates] = await Promise.all([
+    listTaskTemplates(),
+    getCompanyHourlyRates().catch(() => null),
+  ]);
+  const preparation = await listTaskTemplatePreparationByTemplateIds(templates.map((row) => row.id));
+  const templateMap = new Map(templates.map((row) => [row.id, row]));
+  return Promise.all(ids.map(async (chantierId): Promise<ChantierTechnicalForecast> => {
+    const [tasks, devis] = await Promise.all([
+      getTasksByChantierId(chantierId),
+      listDevisByChantier(chantierId),
+    ]);
+    const groups = await Promise.all(devis.map((row) => listDevisLignes(row.id)));
+    const missing: string[] = [];
+    const lines = groups.flat();
+    for (const line of lines) {
+      if (Number(line.quantite ?? 0) * Number(line.prix_unitaire_ht ?? 0) > 0 &&
+        !tasks.some((task) => task.devis_ligne_id === line.id)) {
+        missing.push(`Désignation non préparée : ${line.designation}`);
+      }
+    }
+    if (!preparation.schemaReady) missing.push("Ratios de bibliothèque indisponibles");
+    if (tasks.length === 0) missing.push("Aucune tâche technique");
+    let total = 0;
+    for (const task of tasks) {
+      const result = computeTechnicalTaskCost(
+        task, templateMap,
+        preparation.schemaReady ? preparation.materialsByTemplateId : {},
+        preparation.schemaReady ? preparation.equipmentByTemplateId : {},
+        preparation.schemaReady ? rates : null,
+      );
+      if (result.totalHt === null) missing.push(`${task.titre} : ${result.reason ?? "incomplet"}`);
+      else total += result.totalHt;
+    }
+    return { chantierId, costHt: missing.length === 0 ? round(total) : null, technicalTasks: tasks.length, missing };
+  }));
 }
