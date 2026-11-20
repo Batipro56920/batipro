@@ -188,6 +188,50 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
     } finally { setWorkingId(null); }
   }
 
+  async function saveRealTime(task: ChantierTaskRow) {
+    const draft = getDraft(task.id);
+    const hours = Number(draft.hours.replace(",", "."));
+    const quantity = draft.doneQuantity.trim() ? Number(draft.doneQuantity.replace(",", ".")) : null;
+    const assigned = assigneesByTask[task.id] ?? (task.intervenant_id ? [task.intervenant_id] : []);
+    if (!assigned.includes(draft.intervenantId) || !Number.isFinite(hours) || hours <= 0 ||
+        (quantity !== null && (!Number.isFinite(quantity) || quantity < 0))) {
+      setError("Choisissez un intervenant affecté et une durée valide.");
+      return;
+    }
+    setWorkingId(task.id);
+    setError(null);
+    try {
+      await createChantierTimeEntry({
+        chantier_id: chantierId, task_id: task.id, intervenant_id: draft.intervenantId,
+        work_date: draft.workDate, duration_hours: hours, quantite_realisee: quantity,
+      });
+      patchDraft(task.id, { hours: "", doneQuantity: "" });
+      setReloadVersion((old) => old + 1);
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Pointage non enregistré.");
+    } finally { setWorkingId(null); }
+  }
+
+  async function saveActualMaterial(task: ChantierTaskRow, allowedMaterialIds: string[]) {
+    const draft = getDraft(task.id);
+    const quantity = Number(draft.materialQuantity.replace(",", "."));
+    const assigned = assigneesByTask[task.id] ?? (task.intervenant_id ? [task.intervenant_id] : []);
+    setWorkingId(task.id);
+    setError(null);
+    try {
+      await createTaskMaterialConsumption({
+        chantier_task_id: task.id, material_ratio_id: draft.materialId,
+        intervenant_id: draft.intervenantId, quantite_consommee: quantity,
+        work_date: draft.workDate,
+      }, allowedMaterialIds, assigned);
+      patchDraft(task.id, { materialQuantity: "" });
+      setReloadVersion((old) => old + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Consommation non enregistrée.");
+    } finally { setWorkingId(null); }
+  }
+
   async function createFromTemplate(line: DevisLigneRow) {
     const template = templateMap.get(selection[line.id] ?? "");
     if (!template) return;
@@ -296,7 +340,13 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                           preparation.equipmentByTemplateId[task.task_template_id] ?? []) : null;
                     const taskRequests = requests.filter((request) => request.task_id === task.id && request.statut_commande !== "annule");
                     const timePlanned = cost?.status === "calculated" ? cost.hours : task.temps_prevu_h;
-                    const timeActual = task.temps_reel_h;
+                    const taskEntries = timeEntries.filter((row) => row.task_id === task.id);
+                    const actualHours = taskEntries.reduce((sum, row) => sum + Number(row.duration_hours ?? 0), 0);
+                    const executedQuantity = taskEntries.reduce((sum, row) => sum + Number(row.quantite_realisee ?? 0), 0);
+                    const materialRows = consumptions.filter((row) => row.chantier_task_id === task.id);
+                    const mainRatios = (task.task_template_id && preparation
+                      ? preparation.materialsByTemplateId[task.task_template_id] ?? [] : []).filter((ratio) => ratio.is_main_material);
+                    const draft = getDraft(task.id);
                     return <section key={task.id} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <button type="button" onClick={() => onTaskOpen(task.id)} className="font-semibold text-blue-700 hover:underline">
