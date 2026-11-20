@@ -5,6 +5,8 @@ import { listTaskZoneIdsByTaskIds, replaceTaskZoneIds } from "../../../services/
 import { listTaskAssigneeIdsByTaskIds, replaceTaskAssignees } from "../../../services/chantierTaskAssignees.service";
 import { listIntervenantsByChantierId, type IntervenantRow } from "../../../services/intervenants.service";
 import { listChantierPurchaseRequests, type ChantierPurchaseRequestRow } from "../../../services/chantierPurchaseRequests.service";
+import { createChantierTimeEntry, listChantierTimeEntriesByChantierId, type ChantierTimeEntryRow } from "../../../services/chantierTimeEntries.service";
+import { createTaskMaterialConsumption, listTaskMaterialConsumptions, type TaskMaterialConsumption } from "../../../services/chantierTaskMaterialConsumptions.service";
 import { listDevisLignes, type DevisLigneRow, type DevisRow } from "../../../services/devis.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "../../../services/taskLibrary.service";
@@ -25,12 +27,13 @@ type Props = {
   tasks: ChantierTaskRow[];
   onRefresh: () => Promise<void>;
   onTaskOpen: (id: string) => void;
+  defaultView?: "preparer" | "produire";
 };
 
 const eur = (value: number | null) => value === null ? "Non calculé" :
   value.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
-export default function DesignationsPreparationPanel({ chantierId, devis, tasks, onRefresh, onTaskOpen }: Props) {
+export default function DesignationsPreparationPanel({ chantierId, devis, tasks, onRefresh, onTaskOpen, defaultView = "preparer" }: Props) {
   const [lines, setLines] = useState<DevisLigneRow[]>([]);
   const [templates, setTemplates] = useState<TaskTemplateRow[]>([]);
   const [preparation, setPreparation] = useState<TaskTemplatePreparationCollection | null>(null);
@@ -47,6 +50,17 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
   const [zonesByTask, setZonesByTask] = useState<Record<string, string[]>>({});
   const [assigneesByTask, setAssigneesByTask] = useState<Record<string, string[]>>({});
   const [requests, setRequests] = useState<ChantierPurchaseRequestRow[]>([]);
+  const [timeEntries, setTimeEntries] = useState<ChantierTimeEntryRow[]>([]);
+  const [consumptions, setConsumptions] = useState<TaskMaterialConsumption[]>([]);
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const [drafts, setDrafts] = useState<Record<string, { intervenantId: string; workDate: string; hours: string; doneQuantity: string; materialId: string; materialQuantity: string }>>({});
+  const getDraft = (taskId: string) => drafts[taskId] ?? {
+    intervenantId: "", workDate: new Date().toISOString().slice(0, 10),
+    hours: "", doneQuantity: "", materialId: "", materialQuantity: "",
+  };
+  function patchDraft(taskId: string, patch: Partial<ReturnType<typeof getDraft>>) {
+    setDrafts((previous) => ({ ...previous, [taskId]: { ...getDraft(taskId), ...patch } }));
+  }
   const [readinessLoaded, setReadinessLoaded] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const taskIdsKey = useMemo(() => tasks.map((task) => task.id).sort().join(","), [tasks]);
@@ -63,13 +77,21 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
       listTaskZoneIdsByTaskIds(ids),
       listTaskAssigneeIdsByTaskIds(ids),
       listChantierPurchaseRequests(chantierId),
-    ]).then(([locations, people, zoneLinks, assigneeLinks, purchases]) => {
+      listChantierTimeEntriesByChantierId(chantierId),
+    ]).then(async ([locations, people, zoneLinks, assigneeLinks, purchases, entries]) => {
       if (!current) return;
       setZones(locations.zones);
       setIntervenants(people);
       setZonesByTask(zoneLinks);
       setAssigneesByTask(assigneeLinks);
       setRequests(purchases.requests);
+      setTimeEntries(entries);
+      try {
+        const consumed = await listTaskMaterialConsumptions(ids);
+        if (current) setConsumptions(consumed);
+      } catch (err) {
+        if (current) setResourceError(err instanceof Error ? err.message : "Consommations non disponibles.");
+      }
       if (!locations.schemaReady || !purchases.schemaReady) {
         setResourceError("Certaines données d'architecture ou d'approvisionnement ne sont pas disponibles.");
       }
@@ -77,7 +99,7 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
       if (current) setResourceError(err instanceof Error ? err.message : "Impossible de lire les moyens du chantier.");
     }).finally(() => { if (current) setReadinessLoaded(true); });
     return () => { current = false; };
-  }, [chantierId, taskIdsKey]);
+  }, [chantierId, taskIdsKey, reloadVersion]);
 
   function toggleDesignation(id: string) {
     setExpandedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
@@ -257,9 +279,9 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                     <div className="text-xs font-semibold text-slate-500">Fiche de la prestation</div>
                     <div className="inline-flex rounded-xl border border-slate-200 p-1">
                       <button type="button" onClick={() => setViewByLine((old) => ({...old, [line.id]: "preparer"}))}
-                        className={`rounded-lg px-3 py-1.5 text-sm ${viewByLine[line.id] !== "produire" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Préparer</button>
+                        className={`rounded-lg px-3 py-1.5 text-sm ${(viewByLine[line.id] ?? defaultView) !== "produire" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Préparer</button>
                       <button type="button" onClick={() => setViewByLine((old) => ({...old, [line.id]: "produire"}))}
-                        className={`rounded-lg px-3 py-1.5 text-sm ${viewByLine[line.id] === "produire" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Produire</button>
+                        className={`rounded-lg px-3 py-1.5 text-sm ${(viewByLine[line.id] ?? defaultView) === "produire" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Produire</button>
                     </div>
                   </div>
                   {resourceError && <p className="text-xs text-slate-600">{resourceError}</p>}
@@ -282,7 +304,7 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                         </button>
                         <span className="font-semibold">{eur(cost?.totalHt ?? null)} prévu</span>
                       </div>
-                      {viewByLine[line.id] !== "produire" ? (
+                      {(viewByLine[line.id] ?? defaultView) !== "produire" ? (
                         <div className="grid gap-3 md:grid-cols-2">
                           <label className="space-y-1 text-xs text-slate-600">Tâche bibliothèque
                             <select disabled={workingId !== null} value={task.task_template_id ?? ""}
