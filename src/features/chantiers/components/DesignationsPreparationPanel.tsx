@@ -33,6 +33,12 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [showUnlinked, setShowUnlinked] = useState(false);
+
+  function toggleDesignation(id: string) {
+    setExpandedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  }
 
   useEffect(() => {
     let active = true;
@@ -126,34 +132,43 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-950">Désignations vendues</h2>
+        <h2 className="text-lg font-semibold text-slate-950">Prestations du chantier</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Une désignation est une ligne de devis. Associez une ou plusieurs tâches techniques
-          de la bibliothèque pour calculer les besoins et le coût de revient. Aucun coût importé n'est utilisé.
+          Une seule liste issue du devis. Ouvrez une prestation pour gérer les opérations techniques et leurs coûts.
         </p>
       </div>
       {error && <p role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {loading ? <p className="text-sm text-slate-500">Chargement des désignations et des coûts...</p> : (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {lines.length === 0 && <p className="text-sm text-slate-500">Aucune désignation importée. Importez un devis pour commencer.</p>}
           {lines.map((line) => {
             const linked = tasks.filter((task) => task.devis_ligne_id === line.id);
             const summary = computeDesignationCost(line, tasks, taskCosts);
             return (
-              <article key={line.id} className="rounded-xl border border-slate-200 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium text-slate-500">Désignation · {line.corps_etat ?? "Sans lot"}</div>
-                    <h3 className="mt-1 font-semibold text-slate-950">{line.designation}</h3>
-                    <p className="mt-1 text-xs text-slate-500">{line.quantite ?? "—"} {line.unite ?? ""} · Prix de vente : {eur(summary.saleHt)}</p>
-                  </div>
-                  <div className="text-right text-sm">
-                    <p><span className="text-slate-500">Coût technique : </span><strong>{eur(summary.costHt)}</strong></p>
-                    <p><span className="text-slate-500">Marge : </span><strong>{eur(summary.marginHt)}</strong></p>
-                    {!summary.complete && <p className="mt-1 text-xs text-amber-700">{summary.linkedTasks === 0 ? "Aucune tâche technique associée" : "Chiffrage incomplet"}</p>}
-                  </div>
-                </div>
-                <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+              <article key={line.id} className="rounded-xl border border-slate-200 bg-white">
+                <button type="button" onClick={() => toggleDesignation(line.id)}
+                  aria-expanded={expandedIds.includes(line.id)}
+                  aria-controls={`designation-details-${line.id}`}
+                  className="flex w-full flex-wrap items-center justify-between gap-3 rounded-xl p-3 text-left hover:bg-slate-50">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs text-slate-500">{line.corps_etat ?? "Sans lot"}</span>
+                    <span className="block font-semibold text-slate-950">{line.designation}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">
+                      {line.quantite ?? "—"} {line.unite ?? ""} · Vente {eur(summary.saleHt)} · {linked.length} tâche{linked.length > 1 ? "s" : ""} technique{linked.length > 1 ? "s" : ""}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-3 text-right text-sm">
+                    <span>
+                      <span className="block text-xs text-slate-500">Coût de revient</span>
+                      <strong>{eur(summary.costHt)}</strong>
+                      {summary.complete && <span className="block text-xs text-slate-500">Marge {eur(summary.marginHt)}</span>}
+                    </span>
+                    <span aria-hidden="true" className="text-lg text-slate-500">{expandedIds.includes(line.id) ? "−" : "+"}</span>
+                  </span>
+                </button>
+                {expandedIds.includes(line.id) && (
+                <div id={`designation-details-${line.id}`} className="space-y-2 border-t border-slate-100 px-3 pb-3 pt-3">
+                  <div className="text-xs font-semibold text-slate-500">Opérations techniques associées</div>
                   {linked.map((task) => {
                     const cost = taskCosts.get(task.id);
                     return <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3 text-sm">
@@ -192,9 +207,29 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                       onClick={() => void reassign(task, line.id)}>{task.titre_terrain || task.titre}</button>)}
                   </div>}
                 </div>
+                )}
               </article>
             );
           })}
+          {unlinked.length > 0 && (
+            <section className="rounded-xl border border-dashed border-slate-200">
+              <button type="button" onClick={() => setShowUnlinked((old) => !old)}
+                aria-expanded={showUnlinked}
+                className="flex w-full items-center justify-between px-3 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50">
+                <span>{unlinked.length} tâche{unlinked.length > 1 ? "s" : ""} technique{unlinked.length > 1 ? "s" : ""} sans prestation liée</span>
+                <span aria-hidden="true">{showUnlinked ? "−" : "+"}</span>
+              </button>
+              {showUnlinked && (
+                <div className="space-y-2 border-t border-slate-100 p-3">
+                  {unlinked.map((task) => <button type="button" key={task.id}
+                    onClick={() => onTaskOpen(task.id)}
+                    className="block w-full rounded-lg bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-blue-700 hover:underline">
+                    {task.titre_terrain || task.titre}
+                  </button>)}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       )}
     </section>
