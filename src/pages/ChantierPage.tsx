@@ -2185,6 +2185,24 @@ export default function ChantierPage() {
     }
   }
 
+  // The preparation panel owns its own form state. Re-read the same Supabase
+  // task list on entering production so freshly created tasks are visible
+  // without a hard page refresh or a duplicated local cache.
+  useEffect(() => {
+    if (detailSection !== "execution" || !id) return;
+    let active = true;
+    setTasksLoading(true);
+    setTasksError(null);
+    void Promise.all([refreshTasksOnly(), refreshDevisOnly()])
+      .catch((error: unknown) => {
+        if (active) setTasksError(error instanceof Error ? error.message : "Impossible de charger les tâches du chantier.");
+      })
+      .finally(() => {
+        if (active) setTasksLoading(false);
+      });
+    return () => { active = false; };
+  }, [detailSection, id]);
+
   async function refreshMateriel() {
     if (!id) return;
     setMaterielLoading(true);
@@ -5865,15 +5883,6 @@ export default function ChantierPage() {
           detailSection === "execution" ? "pb-24" : "",
         ].filter(Boolean).join(" ")}
       >
-        {detailSection === "execution" ? (
-          <button
-            type="button"
-            onClick={() => setTaskCreateDrawerOpen(true)}
-            className="fixed bottom-6 right-6 z-20 rounded-full bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700"
-          >
-            + {t("chantierPage.addTask")}
-          </button>
-        ) : null}
         {detailSection === "cockpit" && accueilPanel}
         {detailSection === "retours" && id && (
           <Suspense fallback={<div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Chargement des retours terrain du chantier...</div>}>
