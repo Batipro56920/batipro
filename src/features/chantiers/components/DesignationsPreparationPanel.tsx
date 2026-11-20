@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { createTask, updateTask, type ChantierTaskRow } from "../../../services/chantierTasks.service";
+import { listChantierZones, buildChantierZonePathMap, type ChantierZoneRow } from "../../../services/chantierZones.service";
+import { listTaskZoneIdsByTaskIds, replaceTaskZoneIds } from "../../../services/chantierTaskZones.service";
+import { listTaskAssigneeIdsByTaskIds, replaceTaskAssignees } from "../../../services/chantierTaskAssignees.service";
+import { listIntervenantsByChantierId, type IntervenantRow } from "../../../services/intervenants.service";
+import { listChantierPurchaseRequests, type ChantierPurchaseRequestRow } from "../../../services/chantierPurchaseRequests.service";
 import { listDevisLignes, type DevisLigneRow, type DevisRow } from "../../../services/devis.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "../../../services/taskLibrary.service";
 import {
   listTaskTemplatePreparationByTemplateIds,
+  estimateTaskTemplatePreparation,
   type TaskTemplatePreparationCollection,
 } from "../../../services/taskTemplatePreparation.service";
 import {
@@ -35,6 +41,43 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [showUnlinked, setShowUnlinked] = useState(false);
+  const [viewByLine, setViewByLine] = useState<Record<string, "preparer" | "produire">>({});
+  const [zones, setZones] = useState<ChantierZoneRow[]>([]);
+  const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
+  const [zonesByTask, setZonesByTask] = useState<Record<string, string[]>>({});
+  const [assigneesByTask, setAssigneesByTask] = useState<Record<string, string[]>>({});
+  const [requests, setRequests] = useState<ChantierPurchaseRequestRow[]>([]);
+  const [readinessLoaded, setReadinessLoaded] = useState(false);
+  const [resourceError, setResourceError] = useState<string | null>(null);
+  const taskIdsKey = useMemo(() => tasks.map((task) => task.id).sort().join(","), [tasks]);
+  const zonePaths = useMemo(() => buildChantierZonePathMap(zones), [zones]);
+
+  useEffect(() => {
+    let current = true;
+    setReadinessLoaded(false);
+    setResourceError(null);
+    const ids = taskIdsKey ? taskIdsKey.split(",") : [];
+    void Promise.all([
+      listChantierZones(chantierId),
+      listIntervenantsByChantierId(chantierId),
+      listTaskZoneIdsByTaskIds(ids),
+      listTaskAssigneeIdsByTaskIds(ids),
+      listChantierPurchaseRequests(chantierId),
+    ]).then(([locations, people, zoneLinks, assigneeLinks, purchases]) => {
+      if (!current) return;
+      setZones(locations.zones);
+      setIntervenants(people);
+      setZonesByTask(zoneLinks);
+      setAssigneesByTask(assigneeLinks);
+      setRequests(purchases.requests);
+      if (!locations.schemaReady || !purchases.schemaReady) {
+        setResourceError("Certaines données d'architecture ou d'approvisionnement ne sont pas disponibles.");
+      }
+    }).catch((err: unknown) => {
+      if (current) setResourceError(err instanceof Error ? err.message : "Impossible de lire les moyens du chantier.");
+    }).finally(() => { if (current) setReadinessLoaded(true); });
+    return () => { current = false; };
+  }, [chantierId, taskIdsKey]);
 
   function toggleDesignation(id: string) {
     setExpandedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
@@ -82,6 +125,47 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
 
   const unlinked = tasks.filter((task) => !task.devis_ligne_id);
 
+  async function saveTaskField(task: ChantierTaskRow, patch: Parameters<typeof updateTask>[1]) {
+    setWorkingId(task.id);
+    setError(null);
+    try {
+      await updateTask(task.id, patch);
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Modification impossible.");
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  async function setAssignees(task: ChantierTaskRow, ids: string[]) {
+    const previous = assigneesByTask[task.id] ?? (task.intervenant_id ? [task.intervenant_id] : []);
+    setAssigneesByTask((before) => ({ ...before, [task.id]: ids }));
+    setWorkingId(task.id);
+    try {
+      await replaceTaskAssignees(task.id, ids);
+      await updateTask(task.id, { intervenant_id: ids[0] ?? null });
+      await onRefresh();
+    } catch (err) {
+      setAssigneesByTask((before) => ({ ...before, [task.id]: previous }));
+      setError(err instanceof Error ? err.message : "Affectation impossible.");
+    } finally { setWorkingId(null); }
+  }
+
+  async function setTaskZones(task: ChantierTaskRow, ids: string[]) {
+    const previous = zonesByTask[task.id] ?? (task.zone_id ? [task.zone_id] : []);
+    setZonesByTask((before) => ({ ...before, [task.id]: ids }));
+    setWorkingId(task.id);
+    try {
+      await replaceTaskZoneIds(task.id, ids);
+      await updateTask(task.id, { zone_id: ids.length === 1 ? ids[0] : null });
+      await onRefresh();
+    } catch (err) {
+      setZonesByTask((before) => ({ ...before, [task.id]: previous }));
+      setError(err instanceof Error ? err.message : "Localisation impossible.");
+    } finally { setWorkingId(null); }
+  }
+
   async function createFromTemplate(line: DevisLigneRow) {
     const template = templateMap.get(selection[line.id] ?? "");
     if (!template) return;
@@ -91,7 +175,7 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
       const taskQuantity = template.unite && line.unite &&
         template.unite.trim().toLowerCase().replace("²", "2") === line.unite.trim().toLowerCase().replace("²", "2")
         ? line.quantite ?? 1 : template.quantite_defaut ?? 1;
-      const created = await createTask({
+      await createTask({
         chantier_id: chantierId,
         devis_ligne_id: line.id,
         task_template_id: template.id,
@@ -108,7 +192,8 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
         order_index: tasks.length,
       });
       await onRefresh();
-      onTaskOpen(created.id);
+      setExpandedIds((old) => old.includes(line.id) ? old : [...old, line.id]);
+      setSelection((old) => ({ ...old, [line.id]: "" }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Création de la tâche technique impossible.");
     } finally {
@@ -168,24 +253,146 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                 </button>
                 {expandedIds.includes(line.id) && (
                 <div id={`designation-details-${line.id}`} className="space-y-2 border-t border-slate-100 px-3 pb-3 pt-3">
-                  <div className="text-xs font-semibold text-slate-500">Opérations techniques associées</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-semibold text-slate-500">Fiche de la prestation</div>
+                    <div className="inline-flex rounded-xl border border-slate-200 p-1">
+                      <button type="button" onClick={() => setViewByLine((old) => ({...old, [line.id]: "preparer"}))}
+                        className={`rounded-lg px-3 py-1.5 text-sm ${viewByLine[line.id] !== "produire" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Préparer</button>
+                      <button type="button" onClick={() => setViewByLine((old) => ({...old, [line.id]: "produire"}))}
+                        className={`rounded-lg px-3 py-1.5 text-sm ${viewByLine[line.id] === "produire" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Produire</button>
+                    </div>
+                  </div>
+                  {resourceError && <p className="text-xs text-slate-600">{resourceError}</p>}
+                  {!readinessLoaded && <p className="text-xs text-slate-500">Lecture des moyens du chantier…</p>}
                   {linked.map((task) => {
                     const cost = taskCosts.get(task.id);
-                    return <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3 text-sm">
-                      <div>
-                        <button type="button" onClick={() => onTaskOpen(task.id)} className="font-semibold text-blue-700 hover:underline">{task.titre_terrain || task.titre}</button>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {task.quantite ?? "—"} {task.unite ?? ""} · {cost?.status === "calculated" ?
-                            `Main-d'œuvre ${eur(cost.laborHt)} · Matériaux/frais ${eur(cost.materialsHt)} · Consommables ${eur(cost.consumablesHt)} · Matériel ${eur(cost.equipmentHt)}` :
-                            cost?.reason ?? "Calcul non disponible"}
-                        </p>
+                    const assigned = assigneesByTask[task.id] ?? (task.intervenant_id ? [task.intervenant_id] : []);
+                    const selectedZones = zonesByTask[task.id] ?? (task.zone_id ? [task.zone_id] : []);
+                    const estimate = task.task_template_id && preparation
+                      ? estimateTaskTemplatePreparation(task,
+                          preparation.materialsByTemplateId[task.task_template_id] ?? [],
+                          preparation.equipmentByTemplateId[task.task_template_id] ?? []) : null;
+                    const taskRequests = requests.filter((request) => request.task_id === task.id && request.statut_commande !== "annule");
+                    const timePlanned = cost?.status === "calculated" ? cost.hours : task.temps_prevu_h;
+                    const timeActual = task.temps_reel_h;
+                    return <section key={task.id} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <button type="button" onClick={() => onTaskOpen(task.id)} className="font-semibold text-blue-700 hover:underline">
+                          {task.titre_terrain || task.titre}
+                        </button>
+                        <span className="font-semibold">{eur(cost?.totalHt ?? null)} prévu</span>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <strong>{eur(cost?.totalHt ?? null)}</strong>
-                        <button type="button" disabled={workingId !== null} onClick={() => void reassign(task, null)}
-                          className="text-xs text-slate-500 hover:underline">Détacher</button>
-                      </div>
-                    </div>;
+                      {viewByLine[line.id] !== "produire" ? (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="space-y-1 text-xs text-slate-600">Tâche bibliothèque
+                            <select disabled={workingId !== null} value={task.task_template_id ?? ""}
+                              onChange={(e) => {
+                                const template = templateMap.get(e.target.value);
+                                void saveTaskField(task, { task_template_id: template?.id ?? null,
+                                  task_template_label: template?.titre ?? null });
+                              }} className="w-full rounded-lg border bg-white px-2 py-2 text-sm text-slate-900">
+                              <option value="">Choisir la référence technique</option>
+                              {templates.map((template) => <option key={template.id} value={template.id}>{template.titre}</option>)}
+                            </select>
+                          </label>
+                          <div className="space-y-1">
+                            <div className="text-xs text-slate-600">Quantité et temps prévus</div>
+                            <div className="rounded-lg border border-slate-200 bg-white p-2">
+                              {task.quantite ?? "—"} {task.unite ?? ""} · {timePlanned ?? "—"} h
+                              <button type="button" onClick={() => onTaskOpen(task.id)}
+                                className="ml-3 text-xs font-semibold text-blue-700 hover:underline">Adapter</button>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-xs font-semibold text-slate-700">Architecture — facultative</div>
+                            <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border bg-white p-2">
+                              {zones.filter((zone) => zone.zone_type === "piece").map((zone) =>
+                                <label key={zone.id} className="flex items-center gap-2 text-xs text-slate-700">
+                                  <input type="checkbox" disabled={workingId !== null} checked={selectedZones.includes(zone.id)}
+                                    onChange={(e) => void setTaskZones(task, e.target.checked
+                                      ? [...selectedZones, zone.id] : selectedZones.filter((id) => id !== zone.id))} />
+                                  {zonePaths.get(zone.id) ?? zone.nom}
+                                </label>)}
+                              {zones.filter((zone) => zone.zone_type === "piece").length === 0 && <span className="text-xs text-slate-400">Aucune pièce configurée ; localisation facultative</span>}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-xs font-semibold text-slate-700">Intervenants — accès et affectation</div>
+                            <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border bg-white p-2">
+                              {intervenants.map((person) => <label key={person.id} className="flex items-center gap-2 text-xs text-slate-700">
+                                <input type="checkbox" disabled={workingId !== null} checked={assigned.includes(person.id)}
+                                  onChange={(e) => void setAssignees(task, e.target.checked
+                                    ? [...assigned, person.id] : assigned.filter((id) => id !== person.id))} />
+                                {person.nom}
+                              </label>)}
+                              {intervenants.length === 0 && <span className="text-xs text-slate-400">Aucun intervenant affectable au chantier</span>}
+                            </div>
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <div className="text-xs font-semibold text-slate-700">Dates de préparation / planning</div>
+                            <div className="flex flex-wrap gap-2">
+                              <label className="text-xs text-slate-500">Début
+                                <input key={task.id + "-start-" + (task.date_debut ?? "")} type="date" defaultValue={task.date_debut ?? ""}
+                                  onBlur={(e) => { if (e.target.value !== (task.date_debut ?? "")) void saveTaskField(task, { date_debut: e.target.value || null }); }}
+                                  className="mt-1 block rounded-lg border bg-white px-2 py-2 text-sm"/>
+                              </label>
+                              <label className="text-xs text-slate-500">Fin
+                                <input key={task.id + "-end-" + (task.date_fin ?? "")} type="date" defaultValue={task.date_fin ?? ""}
+                                  onBlur={(e) => { if (e.target.value !== (task.date_fin ?? "")) void saveTaskField(task, { date_fin: e.target.value || null }); }}
+                                  className="mt-1 block rounded-lg border bg-white px-2 py-2 text-sm"/>
+                              </label>
+                              <span className="self-end pb-2 text-xs text-slate-500">Affectations et dates partagées avec la tâche chantier</span>
+                            </div>
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <div className="text-xs font-semibold text-slate-700">Besoins théoriques du modèle</div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <div className="rounded-lg border bg-white p-2">
+                                <div className="mb-1 font-semibold">Matériaux / consommables</div>
+                                {estimate?.materials.map((material) => <div key={material.id} className="text-xs">
+                                  {material.material_name} : {material.estimated_quantity} {material.ratio_unit}
+                                </div>)}
+                                {!estimate?.materials.length && <span className="text-xs text-slate-500">Aucun ratio renseigné</span>}
+                              </div>
+                              <div className="rounded-lg border bg-white p-2">
+                                <div className="mb-1 font-semibold">Matériel à mobiliser</div>
+                                {estimate?.equipment.filter((equipment) => equipment.is_required).map((equipment) => <div key={equipment.id} className="text-xs">
+                                  {equipment.equipment_name} {equipment.default_quantity ? `× ${equipment.default_quantity}` : ""}
+                                </div>)}
+                                {!estimate?.equipment.some((equipment) => equipment.is_required) && <span className="text-xs text-slate-500">Aucun matériel défini</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <div className="font-semibold text-slate-700">Approvisionnements de cette tâche</div>
+                            {taskRequests.length ? taskRequests.map((request) =>
+                              <div key={request.id} className="text-xs text-slate-600">{request.titre} · {request.statut_commande === "a_commander" ? "À commander" : request.statut_commande === "commande" ? "Commandé" : "Livré"}</div>)
+                              : <p className="text-xs text-slate-500">Aucune commande liée : besoins théoriques seulement.</p>}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-lg bg-white p-3">
+                            <div className="font-semibold">Main-d'œuvre : prévu / réel</div>
+                            <p className="mt-1">{timePlanned ?? "—"} h / {timeActual ?? "Non pointé"} {timeActual === null ? "" : "h"}</p>
+                            <p className="mt-1 text-xs text-slate-500">Les heures réelles viennent des pointages du chantier.</p>
+                          </div>
+                          <div className="rounded-lg bg-white p-3">
+                            <div className="font-semibold">Matières, consommables et matériel</div>
+                            <p className="mt-1 text-xs text-slate-600">
+                              {taskRequests.length} demande(s) d'approvisionnement liée(s) · les commandes ne prouvent pas la consommation réelle
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">La saisie réelle et les informations terrain restent dans la fiche d'exécution existante.</p>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <button type="button" onClick={() => onTaskOpen(task.id)}
+                              className="rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white">
+                              Saisir les pointages, consommations et informations terrain
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </section>;
                   })}
                   <div className="flex flex-wrap items-center gap-2">
                     <select aria-label={`Choisir une tâche technique pour ${line.designation}`} value={selection[line.id] ?? ""}
