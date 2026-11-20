@@ -118,7 +118,7 @@ const FOCUS_GUIDANCE: Record<ChantierListFocus, { title: string; description: st
   },
 };
 
-function getInitialFilters(initialFocus: ChantierListFocus | undefined): ChantierListFilters {
+function getInitialFilters(): ChantierListFilters {
   return DEFAULT_FILTERS;
 }
 
@@ -265,7 +265,7 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
 
   useEffect(() => {
     setView(initialView);
-    setFilters(getInitialFilters(initialFocus));
+    setFilters(getInitialFilters());
     setScope("actifs");
     setSelectedIds([]);
     setPreviewRow(null);
