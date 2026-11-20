@@ -4840,12 +4840,6 @@ export default function ChantierPage() {
                 .map((docId) => documentsById.get(docId))
                 .filter((doc): doc is ChantierDocumentRow => Boolean(doc));
               const detailSteps = taskStepsByTaskId.get(activeTaskDetail.id) ?? [];
-              const detailPrixVente = toNumberOrNull((activeTaskDetail as any).montant_total_devis_ht);
-              const detailCout = toNumberOrNull((activeTaskDetail as any).cout_estime_ht);
-              const detailMarge =
-                detailPrixVente !== null && detailCout !== null
-                  ? Math.round((detailPrixVente - detailCout) * 100) / 100
-                  : null;
               const detailReserves = reserves.filter((reserve) => reserve.task_id === activeTaskDetail.id);
               const detailConsignes = consignes.filter((consigne) => consigne.task_id === activeTaskDetail.id);
               const detailTimeNotes = timeEntries.filter(
@@ -5257,36 +5251,16 @@ export default function ChantierPage() {
                     </section>
 
                     <section className={taskDetailTab === "synthese" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
-                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        6. Budget
-                      </div>
-                      <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">PU devis HT</div>
-                          <div className="mt-1 font-semibold text-slate-950">
-                            {formatTaskMoney((activeTaskDetail as any).prix_unitaire_devis_ht)}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Total devis HT</div>
-                          <div className="mt-1 font-semibold text-slate-950">
-                            {formatTaskMoney(detailPrixVente)}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Coût provisoire saisi HT (non vérifié)</div>
-                          <div className="mt-1 font-semibold text-slate-950">
-                            {detailCout === null ? "Non chiffré" : formatTaskMoney(detailCout)}
-                          </div>
-                          <p className="mt-1 text-xs text-amber-700">Ce montant n'est pas encore calculé à partir du détail main-d'œuvre, matériaux, consommables, matériel et frais généraux.</p>
-                        </div>
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Marge indicative (non vérifiée)</div>
-                          <div className="mt-1 font-semibold text-slate-950">
-                            {formatTaskMoney(detailMarge)}
-                          </div>
-                        </div>
-                      </div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">6. Coût technique</div>
+                      <p className="mt-3 text-sm text-slate-600">
+                        Le coût est calculé depuis la bibliothèque : main-d'œuvre, ratios de matériaux,
+                        consommables et matériel. Aucun ancien coût importé n'est utilisé.
+                      </p>
+                      <Link to={`/chantiers/${encodeURIComponent(id ?? "")}/preparation`}
+                        onClick={() => setTaskDetailOpenId(null)}
+                        className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:underline">
+                        Voir les coûts par désignation dans Préparer
+                      </Link>
                     </section>
 
                     <section className={taskDetailTab === "documents" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
