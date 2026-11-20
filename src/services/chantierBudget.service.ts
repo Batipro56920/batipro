@@ -351,6 +351,14 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     }
   }
   if (!prep.schemaReady) previsionTechniqueManquants.push("Ratios de bibliothèque indisponibles");
+  // A sold designation without a technical task is not a zero-cost service.
+  // Only priced lines count: section headings and informational rows have no cost.
+  for (const line of devisLignesGroups.flat()) {
+    const saleAmount = normalizeNumber(line.quantite) * normalizeNumber(line.prix_unitaire_ht);
+    if (saleAmount > 0 && !tasks.some((task) => task.devis_ligne_id === line.id)) {
+      previsionTechniqueManquants.push(`Désignation sans tâche technique : ${line.designation}`);
+    }
+  }
   const previsionTechniqueComplete = prep.schemaReady && tasks.length > 0 && previsionTechniqueManquants.length === 0;
 
   const taskById = new Map(tasks.map((task) => [task.id, task]));
