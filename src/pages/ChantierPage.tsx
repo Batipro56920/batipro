@@ -313,17 +313,6 @@ function statusBadge(status: string | null | undefined, t: (key: string) => stri
   return { label: t("common.chantierStatus.PREPARATION"), className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
-function isTaskAdminValidated(task: Pick<ChantierTaskRow, "quality_status" | "admin_validation_status">) {
-  return task.quality_status === "valide_admin" || task.admin_validation_status === "valide";
-}
-
-function getTaskQualityResetStatus(task: Pick<ChantierTaskRow, "temps_reel_h" | "temps_prevu_h" | "progress_admin_offset_percent">): TaskQualityStatus {
-  const progress = computeTaskProgress(task).displayPercent;
-  if (progress >= 100) return "termine_intervenant";
-  if (progress > 0) return "en_cours";
-  return "a_faire";
-}
-
 function isChantierTabEnabled(
   tabKey: TabKey,
   enabledModules: Set<CompanyFeatureModuleId> | null,
@@ -350,15 +339,6 @@ function getTaskDisplayTitle(task: ChantierTaskRow): string {
     String((task as any).titre_terrain ?? "").trim() ||
     stripLegacyPrefix(String(task.titre ?? "")) ||
     "Sans titre"
-  );
-}
-
-function getTaskLibraryLabel(task: ChantierTaskRow): string {
-  return (
-    String((task as any).task_template_label ?? "").trim() ||
-    String(task.titre ?? "").trim() ||
-    String(task.lot ?? task.corps_etat ?? "").trim() ||
-    "Tâche chantier"
   );
 }
 
@@ -672,12 +652,6 @@ function isAdminOnlyError(err: unknown): boolean {
   );
 }
 
-function toInputNumberString(v: number | null | undefined) {
-  if (v === null || v === undefined) return "";
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "";
-  return String(n);
-}
 function toNumberOrNull(v: unknown) {
   if (v === null || v === undefined || v === "") return null;
   if (typeof v === "string") {
@@ -988,12 +962,9 @@ export default function ChantierPage() {
   const [newTaskTemplateLabel, setNewTaskTemplateLabel] = useState("");
   const [newTaskDescriptionTechnique, setNewTaskDescriptionTechnique] = useState("");
   const [newTaskCaracteristiques, setNewTaskCaracteristiques] = useState("");
-  const [newTaskPriorite, setNewTaskPriorite] = useState<"basse" | "normale" | "haute" | "urgente">("normale");
   const [newTaskPrixUnitaireDevisHt, setNewTaskPrixUnitaireDevisHt] = useState("");
   const [newTaskMontantTotalDevisHt, setNewTaskMontantTotalDevisHt] = useState("");
   const [newTaskCoutEstimeHt, setNewTaskCoutEstimeHt] = useState("");
-  const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>("A_FAIRE");
-  const [newTaskQualityStatus, setNewTaskQualityStatus] = useState<TaskQualityStatus>("a_faire");
   const [newAssignedIntervenantIds, setNewAssignedIntervenantIds] = useState<string[]>([]);
   const [newQuantite, setNewQuantite] = useState("1");
   const [newUnite, setNewUnite] = useState("");
@@ -1016,7 +987,6 @@ export default function ChantierPage() {
   const [editTaskTemplateLabel, setEditTaskTemplateLabel] = useState("");
   const [editTaskDescriptionTechnique, setEditTaskDescriptionTechnique] = useState("");
   const [editTaskCaracteristiques, setEditTaskCaracteristiques] = useState("");
-  const [editTaskPriorite, setEditTaskPriorite] = useState<"basse" | "normale" | "haute" | "urgente">("normale");
   const [editTaskPrixUnitaireDevisHt, setEditTaskPrixUnitaireDevisHt] = useState("");
   const [editTaskMontantTotalDevisHt, setEditTaskMontantTotalDevisHt] = useState("");
   const [editTaskCoutEstimeHt, setEditTaskCoutEstimeHt] = useState("");
@@ -3709,15 +3679,15 @@ export default function ChantierPage() {
       etape_metier: newTaskStepName.trim() || null,
       description_technique: newTaskDescriptionTechnique.trim() || null,
       caracteristiques: newTaskCaracteristiquesList,
-      priorite: newTaskPriorite,
+      priorite: "normale",
       prix_unitaire_devis_ht: parsedPrixUnitaireDevis,
       montant_total_devis_ht: parsedMontantTotalDevis,
       tva_taux_devis: null,
       cout_estime_ht: parsedCoutEstime,
       cout_matiere_estime_ht: null,
       cout_mo_estime_ht: null,
-      status: newTaskStatus,
-      quality_status: newTaskQualityStatus,
+      status: "A_FAIRE",
+      quality_status: "a_faire",
       admin_validation_status: "non_verifie",
       intervenant_id,
       quantite,
@@ -3749,12 +3719,12 @@ export default function ChantierPage() {
         etape_metier: newTaskStepName.trim() || null,
         description_technique: newTaskDescriptionTechnique.trim() || null,
         caracteristiques: newTaskCaracteristiquesList,
-        priorite: newTaskPriorite,
+        priorite: "normale",
         prix_unitaire_devis_ht: parsedPrixUnitaireDevis,
         montant_total_devis_ht: parsedMontantTotalDevis,
         cout_estime_ht: parsedCoutEstime,
-        status: newTaskStatus,
-        quality_status: newTaskQualityStatus,
+        status: "A_FAIRE",
+        quality_status: "a_faire",
         admin_validation_status: "non_verifie",
         intervenant_id,
         quantite,
@@ -3807,15 +3777,12 @@ export default function ChantierPage() {
       setNewTitre("");
       setNewCorpsEtat(lotName);
       setNewLotSelection(lotName);
-      setNewTaskStatus("A_FAIRE");
-      setNewTaskQualityStatus("a_faire");
       setNewTaskZoneId("");
       setNewTaskStepName("");
       setNewTaskTemplateId("");
       setNewTaskTemplateLabel("");
       setNewTaskDescriptionTechnique("");
       setNewTaskCaracteristiques("");
-      setNewTaskPriorite("normale");
       setNewTaskPrixUnitaireDevisHt("");
       setNewTaskMontantTotalDevisHt("");
       setNewTaskCoutEstimeHt("");
@@ -3856,7 +3823,6 @@ export default function ChantierPage() {
     setEditTaskTemplateLabel("");
     setEditTaskDescriptionTechnique("");
     setEditTaskCaracteristiques("");
-    setEditTaskPriorite("normale");
     setEditTaskPrixUnitaireDevisHt("");
     setEditTaskMontantTotalDevisHt("");
     setEditTaskCoutEstimeHt("");
@@ -4197,7 +4163,7 @@ export default function ChantierPage() {
       etape_metier: editTaskStepName.trim() || null,
       description_technique: editTaskDescriptionTechnique.trim() || null,
       caracteristiques: parseTaskCaracteristiquesText(editTaskCaracteristiques),
-      priorite: editTaskPriorite,
+      priorite: t.priorite ?? "normale",
       prix_unitaire_devis_ht: parsedPrixUnitaireDevis,
       montant_total_devis_ht: parsedMontantTotalDevis,
       cout_estime_ht: parsedCoutEstime,
@@ -4232,7 +4198,6 @@ export default function ChantierPage() {
           lot: lotName,
           zone_id: patch.zone_id,
           etape_metier: patch.etape_metier,
-          priorite: patch.priorite,
           status: patch.status,
           quality_status: patch.quality_status,
           admin_validation_status: patch.admin_validation_status,
@@ -6387,19 +6352,6 @@ export default function ChantierPage() {
                             ))}
                           </select>
                         </label>
-                        <label className="space-y-1 text-xs text-slate-600">
-                          <div>Priorité</div>
-                          <select
-                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                            value={newTaskPriorite}
-                            onChange={(e) => setNewTaskPriorite(e.target.value as any)}
-                          >
-                            <option value="basse">Basse</option>
-                            <option value="normale">Normale</option>
-                            <option value="haute">Haute</option>
-                            <option value="urgente">Urgente</option>
-                          </select>
-                        </label>
                       </div>
 
                       <div className="grid gap-2 md:grid-cols-10">
@@ -6564,40 +6516,8 @@ export default function ChantierPage() {
                       </div>
 
                       <div className="grid gap-2 md:grid-cols-3">
-                        <label className="space-y-1 text-xs text-slate-600">
-                          <div>Statut</div>
-                          <select
-                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                            value={newTaskStatus}
-                            onChange={(e) => {
-                              const nextStatus = e.target.value as TaskStatus;
-                              setNewTaskStatus(nextStatus);
-                              setNewTaskQualityStatus(getQualityStatusFromTaskStatus(nextStatus));
-                            }}
-                          >
-                            <option value="A_FAIRE">A faire</option>
-                            <option value="EN_COURS">En cours</option>
-                            <option value="FAIT">Fait</option>
-                          </select>
-                        </label>
-                        <label className="space-y-1 text-xs text-slate-600">
-                          <div>Statut qualité</div>
-                          <select
-                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                            value={newTaskQualityStatus}
-                            onChange={(e) => {
-                              const nextQualityStatus = e.target.value as TaskQualityStatus;
-                              setNewTaskQualityStatus(nextQualityStatus);
-                              setNewTaskStatus(getTaskStatusFromQualityStatus(nextQualityStatus));
-                            }}
-                          >
-                            <option value="a_faire">À faire</option>
-                            <option value="en_cours">En cours</option>
-                            <option value="termine_intervenant">Terminé intervenant</option>
-                            <option value="valide_admin">Validé admin</option>
-                            <option value="a_reprendre">À reprendre</option>
-                          </select>
-                        </label>
+
+
                         <label className="space-y-1 text-xs text-slate-600">
                           <div>Temps prevu (h)</div>
                           <input
@@ -6829,19 +6749,6 @@ export default function ChantierPage() {
                                         {template.lot ? ` · ${template.lot}` : ""}
                                       </option>
                                     ))}
-                                  </select>
-                                </label>
-                                <label className="space-y-1 text-xs text-slate-600">
-                                  <div>Priorité</div>
-                                  <select
-                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                                    value={editTaskPriorite}
-                                    onChange={(e) => setEditTaskPriorite(e.target.value as any)}
-                                  >
-                                    <option value="basse">Basse</option>
-                                    <option value="normale">Normale</option>
-                                    <option value="haute">Haute</option>
-                                    <option value="urgente">Urgente</option>
                                   </select>
                                 </label>
                               </div>
