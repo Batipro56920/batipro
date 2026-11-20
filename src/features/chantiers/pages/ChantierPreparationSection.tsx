@@ -87,7 +87,7 @@ function Drawer({ title, subtitle, onClose, children }: {
   );
 }
 
-export default function ChantierPreparationSection({ chantierId }: { chantierId: string }) {
+export default function ChantierPreparationSection({ chantierId, onTaskOpen }: { chantierId: string; onTaskOpen: (taskId: string) => void }) {
   const [tasks, setTasks] = useState<ChantierTaskRow[]>([]);
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
   const [devis, setDevis] = useState<DevisRow[]>([]);
@@ -401,7 +401,7 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
       {activeDrawer === "tasks" ? (
         <Drawer
           title="Taches chantier"
-          subtitle="Creation, lecture et suppression controlee des taches avant execution terrain."
+          subtitle="Sélectionnez une tâche pour ouvrir sa synthèse et sa préparation sans quitter cet écran."
           onClose={() => setActiveDrawer(null)}
         >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -433,7 +433,7 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
                   <article key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">
-                        <div className="font-semibold text-slate-950">{displayTaskTitle(task)}</div>
+                        <button type="button" onClick={() => { setActiveDrawer(null); onTaskOpen(task.id); }} className="text-left font-semibold text-slate-950 hover:text-blue-700 hover:underline">{displayTaskTitle(task)}</button>
                         <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
                           <span>Lot: {displayTaskLot(task)}</span>
                           <span>Intervenant: {assigned}</span>
@@ -447,6 +447,9 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
                         <div className="min-w-[110px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                           {progress === null ? "Avancement -" : `${progress}%`}
                         </div>
+                        <button type="button" onClick={() => { setActiveDrawer(null); onTaskOpen(task.id); }} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                          Préparer la tâche
+                        </button>
                         {canDeleteTasks ? (
                           <button
                             type="button"
