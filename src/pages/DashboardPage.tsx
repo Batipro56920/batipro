@@ -3,20 +3,17 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 import { getCurrentUserProfile } from "../services/currentUserProfile.service";
-import { listDashboardAlerts, type DashboardAlertRow } from "../services/dashboardAlerts.service";
 import { useI18n } from "../i18n";
 import { DashboardBusinessPanel } from "../features/dashboard/components/DashboardBusinessPanel";
 import { DashboardChantiersPanel } from "../features/dashboard/components/DashboardChantiersPanel";
 import { DashboardEmptyState } from "../features/dashboard/components/DashboardEmptyState";
 import { DashboardHeader } from "../features/dashboard/components/DashboardHeader";
-import { DashboardPriorityFeed } from "../features/dashboard/components/DashboardPriorityFeed";
 import { DashboardSkeleton } from "../features/dashboard/components/DashboardSkeleton";
-import { DashboardVerdict } from "../features/dashboard/components/DashboardVerdict";
 import { useDashboardMetrics } from "../features/dashboard/hooks/useDashboardMetrics";
 import { useMediaQuery } from "../features/dashboard/hooks/useMediaQuery";
 import type { DashboardChantierView, DashboardQueueFilter, MaterielSnapshot } from "../features/dashboard/types";
 
-const QUEUE_FILTERS = new Set<DashboardQueueFilter>(["all", "urgences", "qualite", "retards", "achats", "validations", "alertes", "materiel"]);
+const QUEUE_FILTERS = new Set<DashboardQueueFilter>(["all"]);
 
 const CHANTIER_VIEWS = new Set<DashboardChantierView>(["priorite", "recents", "avancement", "heures"]);
 
@@ -25,10 +22,7 @@ const CHANTIER_VIEWS = new Set<DashboardChantierView>(["priorite", "recents", "a
  * `alertes`/`materiel` filtrent la file, `chantiers`/`avancement`/`heures` trient
  * la liste des chantiers et changent la destination de ses liens.
  */
-const LEGACY_VIEW_FILTERS: Record<string, DashboardQueueFilter> = {
-  alertes: "alertes",
-  materiel: "materiel",
-};
+const LEGACY_VIEW_FILTERS: Record<string, DashboardQueueFilter> = {};
 
 const LEGACY_VIEW_TRIS: Record<string, DashboardChantierView> = {
   chantiers: "recents",
@@ -66,7 +60,6 @@ export default function DashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [materiel, setMateriel] = useState<MaterielSnapshot[]>([]);
-  const [alerts, setAlerts] = useState<DashboardAlertRow[]>([]);
   const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -108,12 +101,10 @@ export default function DashboardPage() {
                 .select("id, chantier_id, titre, designation, statut, status, quantite, unite, created_at")
                 .in("chantier_id", activeChantierIds)
                 .order("created_at", { ascending: false });
-        const alertsResult = await listDashboardAlerts(chantiersResult);
 
         if (!alive) return;
 
         setChantiers(chantiersResult);
-        setAlerts(alertsResult);
 
         if (materielResult.error && !isMissingRelationError(materielResult.error.message)) throw materielResult.error;
 
@@ -122,7 +113,6 @@ export default function DashboardPage() {
         if (!alive) return;
         setChantiers([]);
         setMateriel([]);
-        setAlerts([]);
       } finally {
         if (alive) setLoading(false);
       }
@@ -171,14 +161,14 @@ export default function DashboardPage() {
   const metrics = useDashboardMetrics({
     chantiers,
     materiel,
-    alerts,
+    alerts: [],
     filter: activeFilter,
     chantierView,
     locale,
     t,
   });
 
-  const hasData = chantiers.length > 0 || alerts.length > 0 || materiel.length > 0;
+  const hasData = chantiers.length > 0 || materiel.length > 0;
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-5 lg:space-y-6">
@@ -190,26 +180,7 @@ export default function DashboardPage() {
         <DashboardEmptyState />
       ) : (
         <>
-          <DashboardVerdict
-            verdict={metrics.verdict}
-            segments={metrics.severitySegments}
-            activeFilter={activeFilter}
-            onSelectFilter={selectFilter}
-          />
-
-          {/* Au-dela de 1280px la file garde une longueur de ligne lisible
-              et la colonne de droite occupe la largeur au lieu de la gaspiller. */}
-          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
-            <DashboardPriorityFeed
-              items={metrics.filteredQueue}
-              chips={metrics.filterChips}
-              activeFilter={activeFilter}
-              onSelectFilter={selectFilter}
-              totalCount={metrics.queue.length}
-              compact={isCompact}
-            />
-            <DashboardBusinessPanel metrics={metrics.businessMetrics} defaultOpen={!isCompact} />
-          </div>
+          <DashboardBusinessPanel metrics={metrics.businessMetrics} defaultOpen={!isCompact} />
 
           {/* `key` : changer de tri remet la liste a son etat replie, comme le
               faisait l'ancien focus. */}

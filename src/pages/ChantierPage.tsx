@@ -313,33 +313,6 @@ function statusBadge(status: string | null | undefined, t: (key: string) => stri
   return { label: t("common.chantierStatus.PREPARATION"), className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
-function taskQualityLabel(status: TaskQualityStatus) {
-  if (status === "en_cours") return "En cours";
-  if (status === "termine_intervenant") return "Terminé intervenant";
-  if (status === "valide_admin") return "Validé admin";
-  if (status === "a_reprendre") return "À reprendre";
-  return "À faire";
-}
-
-function taskQualityBadgeClass(status: TaskQualityStatus) {
-  if (status === "valide_admin") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (status === "termine_intervenant") return "bg-blue-50 text-blue-700 border-blue-200";
-  if (status === "a_reprendre") return "bg-red-50 text-red-700 border-red-200";
-  if (status === "en_cours") return "bg-amber-50 text-amber-700 border-amber-200";
-  return "bg-slate-50 text-slate-700 border-slate-200";
-}
-
-function isTaskAdminValidated(task: Pick<ChantierTaskRow, "quality_status" | "admin_validation_status">) {
-  return task.quality_status === "valide_admin" || task.admin_validation_status === "valide";
-}
-
-function getTaskQualityResetStatus(task: Pick<ChantierTaskRow, "temps_reel_h" | "temps_prevu_h" | "progress_admin_offset_percent">): TaskQualityStatus {
-  const progress = computeTaskProgress(task).displayPercent;
-  if (progress >= 100) return "termine_intervenant";
-  if (progress > 0) return "en_cours";
-  return "a_faire";
-}
-
 function isChantierTabEnabled(
   tabKey: TabKey,
   enabledModules: Set<CompanyFeatureModuleId> | null,
@@ -367,29 +340,6 @@ function getTaskDisplayTitle(task: ChantierTaskRow): string {
     stripLegacyPrefix(String(task.titre ?? "")) ||
     "Sans titre"
   );
-}
-
-function getTaskLibraryLabel(task: ChantierTaskRow): string {
-  return (
-    String((task as any).task_template_label ?? "").trim() ||
-    String(task.titre ?? "").trim() ||
-    String(task.lot ?? task.corps_etat ?? "").trim() ||
-    "Tâche chantier"
-  );
-}
-
-function taskPriorityMeta(priority: unknown) {
-  const normalized = String(priority ?? "").trim().toLowerCase();
-  if (normalized === "urgente") {
-    return { label: "Urgente", className: "border-red-200 bg-red-50 text-red-700" };
-  }
-  if (normalized === "haute") {
-    return { label: "Haute", className: "border-amber-200 bg-amber-50 text-amber-700" };
-  }
-  if (normalized === "basse") {
-    return { label: "Basse", className: "border-slate-200 bg-slate-50 text-slate-600" };
-  }
-  return { label: "Normale", className: "border-blue-200 bg-blue-50 text-blue-700" };
 }
 
 function formatTaskMoney(value: unknown): string {
@@ -702,12 +652,6 @@ function isAdminOnlyError(err: unknown): boolean {
   );
 }
 
-function toInputNumberString(v: number | null | undefined) {
-  if (v === null || v === undefined) return "";
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "";
-  return String(n);
-}
 function toNumberOrNull(v: unknown) {
   if (v === null || v === undefined || v === "") return null;
   if (typeof v === "string") {
@@ -1018,12 +962,9 @@ export default function ChantierPage() {
   const [newTaskTemplateLabel, setNewTaskTemplateLabel] = useState("");
   const [newTaskDescriptionTechnique, setNewTaskDescriptionTechnique] = useState("");
   const [newTaskCaracteristiques, setNewTaskCaracteristiques] = useState("");
-  const [newTaskPriorite, setNewTaskPriorite] = useState<"basse" | "normale" | "haute" | "urgente">("normale");
   const [newTaskPrixUnitaireDevisHt, setNewTaskPrixUnitaireDevisHt] = useState("");
   const [newTaskMontantTotalDevisHt, setNewTaskMontantTotalDevisHt] = useState("");
   const [newTaskCoutEstimeHt, setNewTaskCoutEstimeHt] = useState("");
-  const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>("A_FAIRE");
-  const [newTaskQualityStatus, setNewTaskQualityStatus] = useState<TaskQualityStatus>("a_faire");
   const [newAssignedIntervenantIds, setNewAssignedIntervenantIds] = useState<string[]>([]);
   const [newQuantite, setNewQuantite] = useState("1");
   const [newUnite, setNewUnite] = useState("");
@@ -1046,7 +987,6 @@ export default function ChantierPage() {
   const [editTaskTemplateLabel, setEditTaskTemplateLabel] = useState("");
   const [editTaskDescriptionTechnique, setEditTaskDescriptionTechnique] = useState("");
   const [editTaskCaracteristiques, setEditTaskCaracteristiques] = useState("");
-  const [editTaskPriorite, setEditTaskPriorite] = useState<"basse" | "normale" | "haute" | "urgente">("normale");
   const [editTaskPrixUnitaireDevisHt, setEditTaskPrixUnitaireDevisHt] = useState("");
   const [editTaskMontantTotalDevisHt, setEditTaskMontantTotalDevisHt] = useState("");
   const [editTaskCoutEstimeHt, setEditTaskCoutEstimeHt] = useState("");
@@ -1079,7 +1019,6 @@ export default function ChantierPage() {
     Record<string, TaskCocoPreparation>
   >({});
   const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
-  const [taskDetailEditing, setTaskDetailEditing] = useState(false);
   const [taskDetailTab, setTaskDetailTab] = useState<
     "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
   >("synthese");
@@ -3160,7 +3099,6 @@ export default function ChantierPage() {
 
   useEffect(() => {
     setTaskDetailTab("synthese");
-    setTaskDetailEditing(false);
   }, [taskDetailOpenId, activeTaskDetail?.id, activeTaskDetail?.task_template_id]);
 
   useEffect(() => {
@@ -3375,94 +3313,6 @@ export default function ChantierPage() {
   }, [tasks]);
 
   const tempsPrevues = Number((item as any)?.heures_prevues ?? 0) || 0;
-  const reservesOuvertes = useMemo(() => {
-    return reserves.filter((r) => (r.status ?? "") !== "LEVEE").length;
-  }, [reserves]);
-  const overdueTasks = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return tasks.filter((task) => {
-      if (!task.date_fin) return false;
-      if (task.status === "FAIT") return false;
-      const timestamp = Date.parse(`${task.date_fin}T00:00:00`);
-      return Number.isFinite(timestamp) && timestamp < today.getTime();
-    });
-  }, [tasks]);
-  const blockedLots = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const byLot = new Map<string, { hasProgress: boolean; hasPastCommitment: boolean }>();
-    tasks.forEach((task) => {
-      const lot = resolveTaskLotName(task);
-      const current = byLot.get(lot) ?? { hasProgress: false, hasPastCommitment: false };
-      if (task.status === "EN_COURS" || task.status === "FAIT" || Number(task.temps_reel_h ?? 0) > 0) {
-        current.hasProgress = true;
-      }
-      const anchor = task.date_fin ?? task.date_debut ?? task.date;
-      if (anchor) {
-        const timestamp = Date.parse(`${anchor}T00:00:00`);
-        if (Number.isFinite(timestamp) && timestamp < today.getTime()) {
-          current.hasPastCommitment = true;
-        }
-      }
-      byLot.set(lot, current);
-    });
-    return [...byLot.entries()]
-      .filter(([, state]) => state.hasPastCommitment && !state.hasProgress)
-      .map(([lot]) => lot);
-  }, [tasks]);
-  const heuresDepassees = useMemo(() => {
-    if (tempsPrevues <= 0) return 0;
-    return Math.max(0, totalTempsReel - tempsPrevues);
-  }, [tempsPrevues, totalTempsReel]);
-  const missingRecentTime = useMemo(() => {
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const latestRelevantUpdate = tasks.reduce((latest, task) => {
-      if (Number(task.temps_reel_h ?? 0) <= 0) return latest;
-      const timestamp = Date.parse(task.updated_at ?? task.created_at ?? "");
-      return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
-    }, 0);
-    if (totalTempsReel <= 0) return true;
-    if (latestRelevantUpdate <= 0) return true;
-    return latestRelevantUpdate < cutoff;
-  }, [tasks, totalTempsReel]);
-  const alertCards = useMemo(() => {
-    const rows: Array<{ key: string; title: string; detail: string; tone: "warning" | "danger" | "ok" }> = [];
-    if (overdueTasks.length > 0) {
-      rows.push({
-        key: "retard",
-        title: "Tâches en retard",
-        detail: `${overdueTasks.length} tâche${overdueTasks.length > 1 ? "s" : ""} à relancer`,
-        tone: overdueTasks.length > 3 ? "danger" : "warning",
-      });
-    }
-    if (blockedLots.length > 0) {
-      rows.push({
-        key: "lots",
-        title: "Lots bloqués",
-        detail: blockedLots.slice(0, 2).join(" • "),
-        tone: "warning",
-      });
-    }
-    if (heuresDepassees > 0) {
-      rows.push({
-        key: "budget",
-        title: "Dépassement budget",
-        detail: `${heuresDepassees.toFixed(1)} h au-dessus du prévu`,
-        tone: "danger",
-      });
-    }
-    if (missingRecentTime) {
-      rows.push({
-        key: "temps",
-        title: "Absence de saisie récente",
-        detail: "Aucune saisie temps récente sur le chantier",
-        tone: "warning",
-      });
-    }
-    return rows;
-  }, [blockedLots, heuresDepassees, missingRecentTime, overdueTasks.length]);
-
   /* ---------------- actions ---------------- */
 
   // ----- tâches -----
@@ -3505,12 +3355,6 @@ export default function ChantierPage() {
   function onTaskProgressDraftChange(taskId: string, rawValue: string) {
     const normalized = rawValue.replace(",", ".");
     setTaskProgressDrafts((prev) => ({ ...prev, [taskId]: normalized }));
-  }
-
-  function startTaskProgressEdit(task: ChantierTaskRow) {
-    const progress = computeTaskProgress(task);
-    setTaskProgressDrafts((prev) => ({ ...prev, [task.id]: String(progress.offsetPercent ?? 0) }));
-    setTaskProgressEditingId(task.id);
   }
 
   function cancelTaskProgressEdit(task: ChantierTaskRow) {
@@ -3829,15 +3673,15 @@ export default function ChantierPage() {
       etape_metier: newTaskStepName.trim() || null,
       description_technique: newTaskDescriptionTechnique.trim() || null,
       caracteristiques: newTaskCaracteristiquesList,
-      priorite: newTaskPriorite,
+      priorite: "normale",
       prix_unitaire_devis_ht: parsedPrixUnitaireDevis,
       montant_total_devis_ht: parsedMontantTotalDevis,
       tva_taux_devis: null,
       cout_estime_ht: parsedCoutEstime,
       cout_matiere_estime_ht: null,
       cout_mo_estime_ht: null,
-      status: newTaskStatus,
-      quality_status: newTaskQualityStatus,
+      status: "A_FAIRE",
+      quality_status: "a_faire",
       admin_validation_status: "non_verifie",
       intervenant_id,
       quantite,
@@ -3869,12 +3713,12 @@ export default function ChantierPage() {
         etape_metier: newTaskStepName.trim() || null,
         description_technique: newTaskDescriptionTechnique.trim() || null,
         caracteristiques: newTaskCaracteristiquesList,
-        priorite: newTaskPriorite,
+        priorite: "normale",
         prix_unitaire_devis_ht: parsedPrixUnitaireDevis,
         montant_total_devis_ht: parsedMontantTotalDevis,
         cout_estime_ht: parsedCoutEstime,
-        status: newTaskStatus,
-        quality_status: newTaskQualityStatus,
+        status: "A_FAIRE",
+        quality_status: "a_faire",
         admin_validation_status: "non_verifie",
         intervenant_id,
         quantite,
@@ -3927,15 +3771,12 @@ export default function ChantierPage() {
       setNewTitre("");
       setNewCorpsEtat(lotName);
       setNewLotSelection(lotName);
-      setNewTaskStatus("A_FAIRE");
-      setNewTaskQualityStatus("a_faire");
       setNewTaskZoneId("");
       setNewTaskStepName("");
       setNewTaskTemplateId("");
       setNewTaskTemplateLabel("");
       setNewTaskDescriptionTechnique("");
       setNewTaskCaracteristiques("");
-      setNewTaskPriorite("normale");
       setNewTaskPrixUnitaireDevisHt("");
       setNewTaskMontantTotalDevisHt("");
       setNewTaskCoutEstimeHt("");
@@ -3965,40 +3806,6 @@ export default function ChantierPage() {
     }
   }
 
-  function startEditTask(t: ChantierTaskRow) {
-    setEditingTaskId(t.id);
-    const baseTitre = getTaskDisplayTitle(t);
-    const decoded = decodeQtyUnit(baseTitre);
-    const q = toNumberOrNull((t as any).quantite);
-    const rawUnite = (t as any).unite;
-    const unite = (typeof rawUnite === "string" ? rawUnite.trim() : "") || decoded.unite || "";
-    const resolvedLotName = resolveTaskLotName(t);
-    setEditTitre(baseTitre);
-    setEditCorpsEtat(resolvedLotName === "A classer" ? "" : resolvedLotName);
-    setEditLotSelection(resolvedLotName === "A classer" ? "" : resolvedLotName);
-    setEditLotDraftName("");
-    setEditTaskZoneId((t as any).zone_id ?? "");
-    setEditTaskStepName((t as any).etape_metier ?? "");
-    setEditTaskTemplateId((t as any).task_template_id ?? "");
-    setEditTaskTemplateLabel(
-      String((t as any).task_template_label ?? "").trim() ||
-        String((t as any).titre ?? "").trim() ||
-        resolvedLotName,
-    );
-    setEditTaskDescriptionTechnique(String((t as any).description_technique ?? ""));
-    setEditTaskCaracteristiques(((t as any).caracteristiques ?? []).join("\n"));
-    setEditTaskPriorite(((t as any).priorite ?? "normale") as any);
-    setEditTaskPrixUnitaireDevisHt(toInputNumberString((t as any).prix_unitaire_devis_ht));
-    setEditTaskMontantTotalDevisHt(toInputNumberString((t as any).montant_total_devis_ht));
-    setEditTaskCoutEstimeHt(toInputNumberString((t as any).cout_estime_ht));
-    setEditStatus((t.status ?? "A_FAIRE") as any);
-    setEditTaskQualityStatus((t as any).quality_status ?? "a_faire");
-    setEditTaskRepriseReason(String((t as any).reprise_reason ?? ""));
-    setEditAssignedIntervenantIds(getTaskAssignedIntervenantIds(t));
-    setEditQuantite(String(q ?? decoded.quantite ?? 1));
-    setEditUnite(unite);
-    setEditTempsPrevuH(toInputNumberString((t as any).temps_prevu_h));
-  }
   function cancelEditTask() {
     setEditingTaskId(null);
     setSavingTask(false);
@@ -4010,7 +3817,6 @@ export default function ChantierPage() {
     setEditTaskTemplateLabel("");
     setEditTaskDescriptionTechnique("");
     setEditTaskCaracteristiques("");
-    setEditTaskPriorite("normale");
     setEditTaskPrixUnitaireDevisHt("");
     setEditTaskMontantTotalDevisHt("");
     setEditTaskCoutEstimeHt("");
@@ -4019,69 +3825,38 @@ export default function ChantierPage() {
     setEditAssignedIntervenantIds([]);
   }
 
-  async function applyTaskQualityDecision(
-    task: ChantierTaskRow,
-    decision: "valide_admin" | "a_reprendre" | "non_verifie",
-  ) {
-    const repriseReason =
-      decision === "a_reprendre"
-        ? window.prompt("Motif de reprise ?", task.reprise_reason ?? "")?.trim() ?? ""
-        : "";
+  async function saveTaskDetailField(task: ChantierTaskRow, patch: Parameters<typeof updateTask>[1]) {
+    try {
+      await updateTask(task.id, patch);
+      setTasks((previous) => previous.map((row) => row.id === task.id ? { ...row, ...patch } : row));
+    } catch (error) {
+      await refreshTasksOnly();
+      setToast({ type: "error", msg: error instanceof Error ? error.message : "Enregistrement impossible." });
+    }
+  }
 
-    if (decision === "a_reprendre" && !repriseReason) {
-      setToast({ type: "error", msg: "Motif de reprise obligatoire." });
+  async function saveTaskDetailProgress(task: ChantierTaskRow, raw: string) {
+    const percent = Number(raw.replace(",", "."));
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      setToast({ type: "error", msg: "Avancement invalide (0 à 100 %)." });
       return;
     }
-
-    const nextQualityStatus =
-      decision === "non_verifie" ? getTaskQualityResetStatus(task) : decision;
-    const nextStatus =
-      decision === "non_verifie"
-        ? getStatusFromProgress(computeTaskProgress(task).displayPercent)
-        : getTaskStatusFromQualityStatus(nextQualityStatus);
-    const nextAdminValidationStatus: ChantierTaskRow["admin_validation_status"] =
-      decision === "valide_admin" ? "valide" : decision === "a_reprendre" ? "a_reprendre" : "non_verifie";
-    const patch = {
-      status: nextStatus,
-      quality_status: nextQualityStatus,
-      admin_validation_status: nextAdminValidationStatus,
-      validated_at: decision === "valide_admin" ? new Date().toISOString() : null,
-      reprise_reason: decision === "a_reprendre" ? repriseReason : null,
-    };
-
-    setTasks((prev) => prev.map((row) => (row.id === task.id ? { ...row, ...patch } : row)));
-
+    const progress = computeTaskProgress(task);
+    const offset = Math.max(-100, Math.min(100, Math.round(percent - (progress.autoPercent ?? 0))));
+    const status = getStatusFromProgress(percent);
     try {
-      await updateTask(task.id, patch as any);
-      await recordChantierActivity({
-        actionType: decision === "non_verifie" ? "updated" : "validated",
-        entityType: "task",
-        entityId: task.id,
-        reason:
-          decision === "valide_admin"
-            ? "Tâche validée par admin"
-            : decision === "a_reprendre"
-              ? "Tâche marquée à reprendre"
-              : "Validation tâche retirée",
-        changes: {
-          from_quality_status: task.quality_status,
-          to_quality_status: nextQualityStatus,
-          admin_validation_status: patch.admin_validation_status,
-          reprise_reason: patch.reprise_reason,
-        },
+      await adminSetTaskProgressOffset(task.id, offset);
+      await updateTask(task.id, {
+        status,
+        quality_status: getQualityStatusFromTaskStatus(status),
+        admin_validation_status: "non_verifie",
+        validated_at: null,
+        reprise_reason: null,
       });
-      setToast({
-        type: "ok",
-        msg:
-          decision === "valide_admin"
-            ? "Tâche validée."
-            : decision === "a_reprendre"
-              ? "Tâche marquée à reprendre."
-              : "Validation retirée.",
-      });
-    } catch (e: any) {
       await refreshTasksOnly();
-      setToast({ type: "error", msg: e?.message ?? "Erreur validation qualité." });
+    } catch (error) {
+      await refreshTasksOnly();
+      setToast({ type: "error", msg: error instanceof Error ? error.message : "Avancement non enregistré." });
     }
   }
 
@@ -4382,7 +4157,7 @@ export default function ChantierPage() {
       etape_metier: editTaskStepName.trim() || null,
       description_technique: editTaskDescriptionTechnique.trim() || null,
       caracteristiques: parseTaskCaracteristiquesText(editTaskCaracteristiques),
-      priorite: editTaskPriorite,
+      priorite: t.priorite ?? "normale",
       prix_unitaire_devis_ht: parsedPrixUnitaireDevis,
       montant_total_devis_ht: parsedMontantTotalDevis,
       cout_estime_ht: parsedCoutEstime,
@@ -4417,7 +4192,6 @@ export default function ChantierPage() {
           lot: lotName,
           zone_id: patch.zone_id,
           etape_metier: patch.etape_metier,
-          priorite: patch.priorite,
           status: patch.status,
           quality_status: patch.quality_status,
           admin_validation_status: patch.admin_validation_status,
@@ -4429,7 +4203,6 @@ export default function ChantierPage() {
       setToast({ type: "ok", msg: "Tâche mise à jour." });
       setTaskZoneIdsByTaskId((prev) => ({ ...prev, [t.id]: nextTaskPieceZoneIds }));
       setEditingTaskId(null);
-      setTaskDetailEditing(false);
     } catch (e: any) {
       await refreshTasksOnly();
       setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour tâche." });
@@ -4843,7 +4616,7 @@ export default function ChantierPage() {
           ]
         : activeWorkspace === "qualite"
           ? [
-              { key: "reserves", label: "Réserves", href: `/chantiers/${id}/qualite`, enabled: isSectionEnabled("qualite"), active: detailSection === "qualite" || detailSection === "reserves", badge: reservesOuvertes > 0 ? String(reservesOuvertes) : null, priority: reservesOuvertes > 0 },
+              { key: "reserves", label: "Réserves", href: `/chantiers/${id}/qualite`, enabled: isSectionEnabled("qualite"), active: detailSection === "qualite" || detailSection === "reserves" },
               { key: "visites", label: "Visites", href: `/chantiers/${id}/visites`, enabled: isSectionEnabled("visites"), active: detailSection === "visites" },
               { key: "reception", label: "Réception", href: `/chantiers/${id}/reception`, enabled: isSectionEnabled("reception"), active: detailSection === "reception" },
               { key: "sav", label: "SAV", href: `/chantiers/${id}/sav`, enabled: isSectionEnabled("sav"), active: detailSection === "sav" },
@@ -4907,48 +4680,6 @@ export default function ChantierPage() {
     <div className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.5fr)]">
         <div className="space-y-4">
-          <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="bt-section-title text-ink">À traiter maintenant</div>
-                <div className="bt-secondary mt-1 text-muted">Les actions qui demandent une décision sur ce chantier.</div>
-              </div>
-              <span className="rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger-on">
-                {alertCards.length + (reservesOuvertes > 0 ? 1 : 0)} action{alertCards.length + (reservesOuvertes > 0 ? 1 : 0) > 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="mt-3 divide-y divide-subtle">
-              {reservesOuvertes > 0 ? (
-                <Link to={`/chantiers/${id}/qualite`} className="flex items-center justify-between gap-3 py-3 hover:text-primary-on">
-                  <div>
-                    <div className="text-sm font-semibold text-ink">Réserves à lever</div>
-                    <div className="bt-secondary mt-0.5 text-muted">{reservesOuvertes} réserve{reservesOuvertes > 1 ? "s" : ""} encore ouverte{reservesOuvertes > 1 ? "s" : ""}</div>
-                  </div>
-                  <span className="text-sm font-semibold text-primary-on">Traiter →</span>
-                </Link>
-              ) : null}
-              {alertCards.map((alert) => {
-                const href = alert.key === "temps"
-                  ? `/chantiers/${id}/temps`
-                  : alert.key === "budget"
-                    ? `/chantiers/${id}/financier`
-                    : `/chantiers/${id}/execution`;
-                return (
-                  <Link key={alert.key} to={href} className="flex items-center justify-between gap-3 py-3 hover:text-primary-on">
-                    <div>
-                      <div className="text-sm font-semibold text-ink">{alert.title}</div>
-                      <div className="bt-secondary mt-0.5 text-muted">{alert.detail}</div>
-                    </div>
-                    <span className="text-sm font-semibold text-primary-on">Ouvrir →</span>
-                  </Link>
-                );
-              })}
-              {alertCards.length === 0 && reservesOuvertes === 0 ? (
-                <div className="py-4 text-sm font-medium text-success-on">Aucune action urgente sur ce chantier.</div>
-              ) : null}
-            </div>
-          </section>
-
           <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -5103,11 +4834,8 @@ export default function ChantierPage() {
           >
             {(() => {
               const detailTitle = getTaskDisplayTitle(activeTaskDetail);
-              const detailTemplateLabel = getTaskLibraryLabel(activeTaskDetail);
               const detailLot = resolveTaskLotName(activeTaskDetail);
               const detailProgress = computeTaskProgress(activeTaskDetail);
-              const detailPriority = taskPriorityMeta((activeTaskDetail as any).priorite);
-              const detailQuality = ((activeTaskDetail as any).quality_status ?? "a_faire") as TaskQualityStatus;
               const detailDocs = (taskDocumentsByTaskId.get(activeTaskDetail.id) ?? [])
                 .map((docId) => documentsById.get(docId))
                 .filter((doc): doc is ChantierDocumentRow => Boolean(doc));
@@ -5118,7 +4846,6 @@ export default function ChantierPage() {
                 detailPrixVente !== null && detailCout !== null
                   ? Math.round((detailPrixVente - detailCout) * 100) / 100
                   : null;
-              const detailValidated = isTaskAdminValidated(activeTaskDetail);
               const detailReserves = reserves.filter((reserve) => reserve.task_id === activeTaskDetail.id);
               const detailConsignes = consignes.filter((consigne) => consigne.task_id === activeTaskDetail.id);
               const detailTimeNotes = timeEntries.filter(
@@ -5180,52 +4907,9 @@ export default function ChantierPage() {
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-right">
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Avancement</div>
-                          <span className={["rounded-full border px-2 py-0.5 text-[11px] font-semibold", detailPriority.className].join(" ")}>
-                            {detailPriority.label}
-                          </span>
-                        </div>
+                                                  </div>
                         <div className="mt-1 text-lg font-semibold text-slate-950">{detailProgress.displayPercent}%</div>
                       </div>
-                      {!taskDetailEditing ? (
-                        <button type="button" onClick={() => {
-                          startEditTask(activeTaskDetail);
-                          setTaskDetailEditing(true);
-                          setTaskDetailTab("synthese");
-                        }} className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">
-                          Modifier ici
-                        </button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <button type="button" disabled={savingTask} onClick={() => { cancelEditTask(); setTaskDetailEditing(false); }} className="rounded-xl border px-4 py-2 text-sm">Annuler</button>
-                          <button type="button" disabled={savingTask} onClick={() => void saveEditTask(activeTaskDetail)} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                            {savingTask ? "Enregistrement..." : "Enregistrer"}
-                          </button>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void applyTaskQualityDecision(
-                            activeTaskDetail,
-                            detailValidated ? "non_verifie" : "valide_admin",
-                          )
-                        }
-                        className={[
-                          "rounded-xl border px-4 py-2 text-sm",
-                          detailValidated
-                            ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                            : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
-                        ].join(" ")}
-                      >
-                        {detailValidated ? "Dévalider" : "Valider"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void applyTaskQualityDecision(activeTaskDetail, "a_reprendre")}
-                        className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
-                      >
-                        Reprendre
-                      </button>
                       <button
                         type="button"
                         onClick={() => setTaskDetailOpenId(null)}
@@ -5262,48 +4946,32 @@ export default function ChantierPage() {
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4 sm:col-span-2">
                           <div className="text-xs font-semibold text-slate-600">Tâche bibliothèque</div>
-                          {taskDetailEditing ? (
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              <label className="text-xs text-slate-600">Intitulé de la tâche
-                                <input className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editTitre} onChange={(e) => setEditTitre(e.target.value)} />
-                              </label>
-                              <label className="text-xs text-slate-600">Modèle bibliothèque
-                                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editTaskTemplateId} onChange={(e) => applyTaskTemplateToEditTask(e.target.value)}>
-                                  <option value="">Aucun modèle</option>
-                                  {taskLibraryTemplates.map((template) => <option key={template.id} value={template.id}>{template.titre}</option>)}
-                                </select>
-                              </label>
-                              <label className="text-xs text-slate-600">Lot
-                                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editLotSelection} onChange={(e) => { setEditLotSelection(e.target.value); setEditCorpsEtat(e.target.value); }}>
-                                  <option value="">Choisir un lot</option>
-                                  {lotOptions.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
-                                </select>
-                              </label>
-                              <label className="text-xs text-slate-600">Priorité
-                                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editTaskPriorite} onChange={(e) => setEditTaskPriorite(e.target.value as typeof editTaskPriorite)}>
-                                  <option value="basse">Basse</option><option value="normale">Normale</option><option value="haute">Haute</option><option value="urgente">Urgente</option>
-                                </select>
-                              </label>
-                            </div>
-                          ) : <div className="mt-1 font-medium text-slate-950">{detailTemplateLabel}</div>}
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <label className="text-xs text-slate-600">Intitulé
+                              <input key={activeTaskDetail.id + "-title"} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" defaultValue={detailTitle}
+                                onBlur={(e) => { const title = e.currentTarget.value.trim(); if (title && title !== detailTitle) void saveTaskDetailField(activeTaskDetail, { titre: title, titre_terrain: title }); }} />
+                            </label>
+                            <label className="text-xs text-slate-600">Tâche bibliothèque
+                              <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={activeTaskDetail.task_template_id ?? ""}
+                                onChange={(e) => { const template = taskLibraryTemplateById.get(e.target.value); void saveTaskDetailField(activeTaskDetail, { task_template_id: e.target.value || null, task_template_label: template?.titre ?? null }); }}>
+                                <option value="">Aucune référence</option>
+                                {taskLibraryTemplates.map((template) => <option key={template.id} value={template.id}>{template.titre}</option>)}
+                              </select>
+                            </label>
+                            <label className="text-xs text-slate-600">Lot
+                              <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={detailLot === "A classer" ? "" : detailLot}
+                                onChange={(e) => void saveTaskDetailField(activeTaskDetail, { lot: e.target.value || null, corps_etat: e.target.value || null })}>
+                                <option value="">Sans lot</option>
+                                {lotOptions.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
+                              </select>
+                            </label>
+                          </div>
                           {activeTaskDetail.task_template_id && (
                             <Link to={`/bibliotheque?templateId=${encodeURIComponent(activeTaskDetail.task_template_id)}`}
                               target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:underline">
                               Consulter le modèle bibliothèque
                             </Link>
                           )}
-                        </div>
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Lot</div>
-                          <div className="mt-1 font-semibold text-slate-950">{detailLot}</div>
-                        </div>
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Validation qualité</div>
-                          <div className="mt-1">
-                            <span className={["rounded-full border px-3 py-1 text-xs font-semibold", taskQualityBadgeClass(detailQuality)].join(" ")}>
-                              {detailValidated ? "Validée" : taskQualityLabel(detailQuality)}
-                            </span>
-                          </div>
                         </div>
                       </div>
                     </section>
@@ -5367,17 +5035,31 @@ export default function ChantierPage() {
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Quantité</div>
-                          {taskDetailEditing ? <div className="mt-2 flex gap-2"><input aria-label="Quantité" inputMode="decimal" className="w-24 rounded-lg border px-2 py-1.5" value={editQuantite} onChange={(e) => setEditQuantite(e.target.value)} /><input aria-label="Unité" className="w-24 rounded-lg border px-2 py-1.5" value={editUnite} onChange={(e) => setEditUnite(e.target.value)} /></div> : <div className="mt-1 font-semibold text-slate-950">{activeTaskDetail.quantite ?? "—"} {activeTaskDetail.unite ?? ""}</div>}
+                          <div className="mt-2 flex gap-2">
+                            <input key={activeTaskDetail.id + "-qty"} aria-label="Quantité" inputMode="decimal" className="w-24 rounded-lg border px-2 py-1.5"
+                              defaultValue={String(activeTaskDetail.quantite ?? 1)}
+                              onBlur={(e) => { const value = toNumberOrNull(e.currentTarget.value); if (value !== null && value > 0 && value !== activeTaskDetail.quantite) void saveTaskDetailField(activeTaskDetail, { quantite: value }); }} />
+                            <input key={activeTaskDetail.id + "-unit"} aria-label="Unité" className="w-24 rounded-lg border px-2 py-1.5"
+                              defaultValue={activeTaskDetail.unite ?? ""}
+                              onBlur={(e) => { if (e.currentTarget.value !== (activeTaskDetail.unite ?? "")) void saveTaskDetailField(activeTaskDetail, { unite: e.currentTarget.value.trim() || null }); }} />
+                          </div>
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Temps prévu / passé</div>
-                          {taskDetailEditing ? <input aria-label="Temps prévu en heures" inputMode="decimal" className="mt-2 w-full rounded-lg border px-2 py-1.5" value={editTempsPrevuH} onChange={(e) => setEditTempsPrevuH(e.target.value)} /> : <div className="mt-1 font-semibold text-slate-950">{Math.round(Number(activeTaskDetail.temps_prevu_h ?? 0) * 100) / 100} h prévues · {Math.round(Number(activeTaskDetail.temps_reel_h ?? 0) * 100) / 100} h réalisées</div>}
+                          <input key={activeTaskDetail.id + "-hours"} aria-label="Temps prévu en heures" inputMode="decimal" className="mt-2 w-full rounded-lg border px-2 py-1.5"
+                            defaultValue={String(activeTaskDetail.temps_prevu_h ?? "")} placeholder="Heures prévues"
+                            onBlur={(e) => { const value = toNumberOrNull(e.currentTarget.value); if (value === null || value > 0) void saveTaskDetailField(activeTaskDetail, { temps_prevu_h: value }); }} />
+                          <div className="mt-1 text-xs text-slate-500">{Math.round(Number(activeTaskDetail.temps_reel_h ?? 0) * 100) / 100} h réalisées</div>
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Avancement</div>
-                          <div className="mt-1 font-semibold text-slate-950">
-                            {detailProgress.displayPercent}%
-                          </div>
+                          <div className="mt-1 font-semibold text-slate-950">{detailProgress.displayPercent}% · {detailProgress.displayPercent >= 100 ? "Terminé" : detailProgress.displayPercent > 0 ? "En cours" : "À faire"}</div>
+                          <input key={activeTaskDetail.id + "-progress-" + detailProgress.displayPercent}
+                            aria-label="Avancement en pourcentage" type="range" min={0} max={100} step={5}
+                            defaultValue={detailProgress.displayPercent} className="mt-3 w-full accent-blue-600"
+                            onPointerUp={(e) => void saveTaskDetailProgress(activeTaskDetail, e.currentTarget.value)}
+                            onKeyUp={(e) => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) void saveTaskDetailProgress(activeTaskDetail, e.currentTarget.value); }}
+                          />
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Dates</div>
@@ -5854,9 +5536,6 @@ export default function ChantierPage() {
                   <span>{item.adresse || "Adresse non renseignée"}</span>
                   <span>Fin {item.date_fin_prevue ?? item.planning_end_date ?? "-"}</span>
                   <span className="font-semibold text-ink-secondary">{avancement}%</span>
-                  <span className={alertCards.length ? "font-semibold text-danger-on" : "font-semibold text-success-on"}>
-                    {alertCards.length ? `${alertCards.length} alerte(s)` : "Aucune alerte critique"}
-                  </span>
                 </div>
               </div>
             </div>
@@ -6667,19 +6346,6 @@ export default function ChantierPage() {
                             ))}
                           </select>
                         </label>
-                        <label className="space-y-1 text-xs text-slate-600">
-                          <div>Priorité</div>
-                          <select
-                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                            value={newTaskPriorite}
-                            onChange={(e) => setNewTaskPriorite(e.target.value as any)}
-                          >
-                            <option value="basse">Basse</option>
-                            <option value="normale">Normale</option>
-                            <option value="haute">Haute</option>
-                            <option value="urgente">Urgente</option>
-                          </select>
-                        </label>
                       </div>
 
                       <div className="grid gap-2 md:grid-cols-10">
@@ -6844,40 +6510,8 @@ export default function ChantierPage() {
                       </div>
 
                       <div className="grid gap-2 md:grid-cols-3">
-                        <label className="space-y-1 text-xs text-slate-600">
-                          <div>Statut</div>
-                          <select
-                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                            value={newTaskStatus}
-                            onChange={(e) => {
-                              const nextStatus = e.target.value as TaskStatus;
-                              setNewTaskStatus(nextStatus);
-                              setNewTaskQualityStatus(getQualityStatusFromTaskStatus(nextStatus));
-                            }}
-                          >
-                            <option value="A_FAIRE">A faire</option>
-                            <option value="EN_COURS">En cours</option>
-                            <option value="FAIT">Fait</option>
-                          </select>
-                        </label>
-                        <label className="space-y-1 text-xs text-slate-600">
-                          <div>Statut qualité</div>
-                          <select
-                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                            value={newTaskQualityStatus}
-                            onChange={(e) => {
-                              const nextQualityStatus = e.target.value as TaskQualityStatus;
-                              setNewTaskQualityStatus(nextQualityStatus);
-                              setNewTaskStatus(getTaskStatusFromQualityStatus(nextQualityStatus));
-                            }}
-                          >
-                            <option value="a_faire">À faire</option>
-                            <option value="en_cours">En cours</option>
-                            <option value="termine_intervenant">Terminé intervenant</option>
-                            <option value="valide_admin">Validé admin</option>
-                            <option value="a_reprendre">À reprendre</option>
-                          </select>
-                        </label>
+
+
                         <label className="space-y-1 text-xs text-slate-600">
                           <div>Temps prevu (h)</div>
                           <input
@@ -7031,7 +6665,6 @@ export default function ChantierPage() {
                   const assignedNames = getTaskAssignedIntervenantNames(t);
                   const taskZoneLabel = resolveTaskZoneSummary(t);
                   const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
-                  const taskValidated = isTaskAdminValidated(t);
                   const taskRepriseReason = String((t as any).reprise_reason ?? "").trim();
 
                   return (
@@ -7110,19 +6743,6 @@ export default function ChantierPage() {
                                         {template.lot ? ` · ${template.lot}` : ""}
                                       </option>
                                     ))}
-                                  </select>
-                                </label>
-                                <label className="space-y-1 text-xs text-slate-600">
-                                  <div>Priorité</div>
-                                  <select
-                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                                    value={editTaskPriorite}
-                                    onChange={(e) => setEditTaskPriorite(e.target.value as any)}
-                                  >
-                                    <option value="basse">Basse</option>
-                                    <option value="normale">Normale</option>
-                                    <option value="haute">Haute</option>
-                                    <option value="urgente">Urgente</option>
                                   </select>
                                 </label>
                               </div>
@@ -7385,11 +7005,6 @@ export default function ChantierPage() {
                                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Avancement</div>
                                 <div className="mt-1 text-2xl font-semibold text-slate-950">{avancementPct}%</div>
                               </div>
-                              {taskValidated ? (
-                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
-                                  Validée
-                                </span>
-                              ) : null}
                             </div>
                             <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
                               <div
@@ -7399,30 +7014,7 @@ export default function ChantierPage() {
                             </div>
                             {!isAdjustingProgress ? (
                               <div className="mt-3 flex flex-wrap justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void applyTaskQualityDecision(
-                                      t,
-                                      taskValidated ? "non_verifie" : "valide_admin",
-                                    )
-                                  }
-                                  className={[
-                                    "rounded-xl border px-3 py-2 text-xs",
-                                    taskValidated
-                                      ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                                      : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
-                                  ].join(" ")}
-                                >
-                                  {taskValidated ? "Dévalider" : "Valider"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => startTaskProgressEdit(t)}
-                                  className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
-                                >
-                                  Ajuster
-                                </button>
+                                
                                 <button
                                   type="button"
                                   onClick={() => setTaskDetailOpenId(t.id)}

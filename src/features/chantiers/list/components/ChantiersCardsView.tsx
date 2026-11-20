@@ -22,16 +22,8 @@ export function ChantiersCardsView({
   return (
     <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {rows.map((row) => {
-        const terrainFeedbackOpenCount = row.terrainFeedbackOpenCount ?? 0;
-        const terrainFeedbackPriorityCount = row.terrainFeedbackPriorityCount ?? 0;
-        const hasOpenTerrainFeedbacks = terrainFeedbackOpenCount > 0;
-        const hasPriorityTerrainFeedbacks = terrainFeedbackPriorityCount > 0;
-  const terrainFeedbackHref = `/chantiers/${encodeURIComponent(row.id)}/retours-terrain`;
+        const terrainFeedbackHref = `/chantiers/${encodeURIComponent(row.id)}/retours-terrain`;
         const qualityHref = `/chantiers/${row.id}/qualite`;
-        const qualityLinkTone: Tone = hasPriorityTerrainFeedbacks ? "danger" : hasOpenTerrainFeedbacks ? "warning" : "normal";
-        const terrainFeedbackLabel = hasPriorityTerrainFeedbacks
-          ? `${terrainFeedbackPriorityCount} retour${terrainFeedbackPriorityCount > 1 ? "s" : ""} terrain urgent${terrainFeedbackPriorityCount > 1 ? "s" : ""}`
-          : `${terrainFeedbackOpenCount} retour${terrainFeedbackOpenCount > 1 ? "s" : ""} terrain à traiter`;
 
         return (
           <article
@@ -42,7 +34,6 @@ export function ChantiersCardsView({
             onKeyDown={(event) => event.key === "Enter" && onPreview(row)}
             className="relative cursor-pointer overflow-hidden rounded-card border border-subtle bg-surface transition-colors duration-[120ms] hover:bg-interactive"
           >
-            {row.isLate ? <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-danger" /> : null}
 
             <div className="px-4 py-3">
               <div className="flex items-start justify-between gap-3">
@@ -84,39 +75,13 @@ export function ChantiersCardsView({
               </span>
             </div>
 
-            {row.isLate || hasOpenTerrainFeedbacks ? (
-              <div className="space-y-1.5 border-t border-subtle px-4 py-2">
-                {row.isLate ? (
-                  <p className={`bt-caption inline-flex rounded-full px-2 py-0.5 ${TONE_SOFT.danger}`}>En retard</p>
-                ) : null}
-                {hasOpenTerrainFeedbacks ? (
-                  <div className="grid gap-1.5 sm:grid-cols-2" onClick={(event) => event.stopPropagation()}>
-                    <Link
-                      to={terrainFeedbackHref}
-                      className={`bt-tap flex items-center justify-between gap-2 rounded-field px-2.5 text-[13px] font-medium transition-opacity duration-[120ms] hover:opacity-80 ${
-                        hasPriorityTerrainFeedbacks ? TONE_SOFT.danger : TONE_SOFT.warning
-                      }`}
-                      title="Ouvrir les retours terrain de ce chantier"
-                    >
-                      <span className="truncate">{terrainFeedbackLabel}</span>
-                      <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-                    </Link>
-                    <Link to={qualityHref} className={QUICK_LINK_CLASS} title="Ouvrir la qualité et les réserves de ce chantier">
-                      <span className="truncate">Suivre en réserves</span>
-                      <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
             <div className="grid grid-cols-2 gap-1.5 border-t border-subtle px-4 py-2 sm:grid-cols-4" onClick={(event) => event.stopPropagation()}>
               <QuickLink href={`/chantiers/${row.id}/preparation`} icon={ClipboardList} label="Préparer" />
               <QuickLink href={`/chantiers/${row.id}/execution`} icon={Hammer} label="Exécution" />
               <QuickLink href={`/chantiers/${row.id}/temps`} icon={Clock3} label="Temps" />
               <QuickLink href={`/chantiers/${row.id}/planning`} icon={CalendarDays} label="Planning" />
-              <QuickLink href={terrainFeedbackHref} icon={AlertTriangle} label="Retours" tone={qualityLinkTone} />
-              <QuickLink href={qualityHref} icon={AlertTriangle} label="Qualité" tone={qualityLinkTone} />
+              <QuickLink href={terrainFeedbackHref} icon={AlertTriangle} label="Retours" />
+              <QuickLink href={qualityHref} icon={AlertTriangle} label="Qualité" />
               <QuickLink href={`/chantiers/${row.id}/documents`} icon={FileText} label="Documents" />
             </div>
 
