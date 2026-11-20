@@ -1,6 +1,5 @@
-import { Bell, Clock3, FileText, MapPin, type LucideIcon } from "lucide-react";
-import { Link } from "react-router-dom";
-import { TONE_SOFT, type Tone } from "../../../../design-system/tone";
+import { FileText, MapPin } from "lucide-react";
+import { TONE_SOFT } from "../../../../design-system/tone";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
@@ -15,7 +14,7 @@ type Props = {
   actions: ChantierListActions;
 };
 
-const TABLE_COLUMNS = "44px minmax(240px,1.5fr) 110px 110px 130px 100px minmax(130px,auto) 170px";
+const TABLE_COLUMNS = "44px minmax(240px,1.5fr) 110px 110px 130px 100px 170px";
 
 const CHECKBOX_CLASS =
   "h-[18px] w-[18px] rounded-[5px] border-[1.5px] border-strong bg-surface accent-[var(--bt-primary)]";
@@ -34,7 +33,6 @@ export function ChantiersListView({ rows, selectedIds, onToggleSelection, onPrev
         <span>Budget</span>
         <span>Temps</span>
         <span>Échéance</span>
-        <span>Alertes</span>
         <span className="text-right">Actions</span>
       </div>
 
@@ -70,7 +68,6 @@ export function ChantiersListView({ rows, selectedIds, onToggleSelection, onPrev
               <div className="bt-num text-sm text-ink">{budgetLabel(row.budgetHt)}</div>
               <div className="bt-num text-sm text-ink-secondary">{timeLabel(row.heures_prevues, row.heures_passees)}</div>
               <div className="bt-num text-sm text-ink-secondary">{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</div>
-              <AlertBadges row={row} />
               <ChantierRowActions row={row} actions={actions} />
             </div>
           );
@@ -116,9 +113,6 @@ export function ChantiersListView({ rows, selectedIds, onToggleSelection, onPrev
                     <span aria-hidden>·</span> {shortDate(row.date_fin_prevue ?? row.planning_end_date)}
                   </p>
 
-                  <div className="mt-2">
-                    <AlertBadges row={row} />
-                  </div>
 
                   <div className="mt-3">
                     <ChantierRowActions row={row} actions={actions} />
@@ -156,52 +150,3 @@ function ChantierIdentity({ row }: { row: ChantierDerived }) {
   );
 }
 
-function AlertBadges({ row }: { row: ChantierDerived }) {
-  const terrainFeedbackOpenCount = row.terrainFeedbackOpenCount ?? 0;
-  const terrainFeedbackPriorityCount = row.terrainFeedbackPriorityCount ?? 0;
-  const hasOpenTerrainFeedbacks = terrainFeedbackOpenCount > 0;
-  const terrainTone: Tone = terrainFeedbackPriorityCount > 0 ? "danger" : "warning";
-  const terrainLabel = terrainFeedbackPriorityCount > 0
-    ? `${terrainFeedbackPriorityCount} retour${terrainFeedbackPriorityCount > 1 ? "s" : ""} urgent${terrainFeedbackPriorityCount > 1 ? "s" : ""}`
-    : `${terrainFeedbackOpenCount} retour${terrainFeedbackOpenCount > 1 ? "s" : ""}`;
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {row.isLate ? <Badge icon={Bell} label="En retard" tone="danger" /> : <Badge icon={Clock3} label="À jour" tone="normal" />}
-      {hasOpenTerrainFeedbacks ? (
-        <Badge
-          icon={Bell}
-          label={terrainLabel}
-          tone={terrainTone}
-          href={`/chantiers/${encodeURIComponent(row.id)}/retours-terrain`}
-          title="Ouvrir les retours terrain de ce chantier"
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function Badge({ icon: Icon, label, tone, href, title }: { icon: LucideIcon; label: string; tone: Tone; href?: string; title?: string }) {
-  const className = `bt-caption inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${TONE_SOFT[tone]}`;
-
-  if (href) {
-    return (
-      <Link
-        to={href}
-        title={title}
-        onClick={(event) => event.stopPropagation()}
-        className={`${className} transition-opacity duration-[120ms] hover:opacity-80`}
-      >
-        <Icon className="h-3 w-3" strokeWidth={1.75} />
-        {label}
-      </Link>
-    );
-  }
-
-  return (
-    <span className={className} title={title}>
-      <Icon className="h-3 w-3" strokeWidth={1.75} />
-      {label}
-    </span>
-  );
-}
