@@ -443,25 +443,92 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                           </div>
                         </div>
                       ) : (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-lg bg-white p-3">
-                            <div className="font-semibold">Main-d'œuvre : prévu / réel</div>
-                            <p className="mt-1">{timePlanned ?? "—"} h / {timeActual ?? "Non pointé"} {timeActual === null ? "" : "h"}</p>
-                            <p className="mt-1 text-xs text-slate-500">Les heures réelles viennent des pointages du chantier.</p>
+                        <div className="space-y-3">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-lg bg-white p-3">
+                              <div className="font-semibold">Main-d'œuvre prévue / pointée</div>
+                              <p className="mt-1">{timePlanned ?? "—"} h / {actualHours.toLocaleString("fr-FR")} h</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {executedQuantity > 0
+                                  ? `Ratio terrain : ${(actualHours / executedQuantity).toLocaleString("fr-FR", { maximumFractionDigits: 3 })} h / ${task.unite ?? "unité"} réalisée`
+                                  : "Saisissez la quantité exécutée pour obtenir le ratio réel."}
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-white p-3">
+                              <div className="font-semibold">Matériaux principaux réellement consommés</div>
+                              {mainRatios.map((ratio) => {
+                                const used = materialRows.filter((row) => row.material_ratio_id === ratio.id)
+                                  .reduce((sum, row) => sum + row.quantite_consommee, 0);
+                                const planned = estimate?.materials.find((row) => row.id === ratio.id)?.estimated_quantity;
+                                return <p key={ratio.id} className="mt-1 text-xs text-slate-600">
+                                  {ratio.material_name} : {used.toLocaleString("fr-FR")} / {planned ?? "—"} {ratio.ratio_unit} (réel / prévu)
+                                  {executedQuantity > 0 && <span> · {(used / executedQuantity).toLocaleString("fr-FR", { maximumFractionDigits: 3 })} par unité réalisée</span>}
+                                </p>;
+                              })}
+                              {!mainRatios.length && <p className="mt-1 text-xs text-slate-500">Aucun matériau principal suivi dans le modèle.</p>}
+                              <p className="mt-2 text-xs text-slate-500">Les achats et les commandes ne sont pas comptés comme consommations.</p>
+                            </div>
                           </div>
-                          <div className="rounded-lg bg-white p-3">
-                            <div className="font-semibold">Matières, consommables et matériel</div>
-                            <p className="mt-1 text-xs text-slate-600">
-                              {taskRequests.length} demande(s) d'approvisionnement liée(s) · les commandes ne prouvent pas la consommation réelle
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">La saisie réelle et les informations terrain restent dans la fiche d'exécution existante.</p>
+                          <form onSubmit={(event) => { event.preventDefault(); void saveRealTime(task); }}
+                            className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="font-semibold">Ajouter un pointage et la quantité réalisée</div>
+                            <div className="flex flex-wrap items-end gap-2">
+                              <label className="text-xs text-slate-600">Intervenant
+                                <select required value={draft.intervenantId} onChange={(event) => patchDraft(task.id, { intervenantId: event.target.value })}
+                                  className="mt-1 block rounded-lg border px-2 py-2 text-sm">
+                                  <option value="">Choisir</option>
+                                  {intervenants.filter((person) => assigned.includes(person.id)).map((person) =>
+                                    <option key={person.id} value={person.id}>{person.nom}</option>)}
+                                </select>
+                              </label>
+                              <label className="text-xs text-slate-600">Date
+                                <input type="date" required value={draft.workDate} onChange={(event) => patchDraft(task.id, { workDate: event.target.value })}
+                                  className="mt-1 block rounded-lg border px-2 py-2 text-sm"/>
+                              </label>
+                              <label className="text-xs text-slate-600">Heures
+                                <input required inputMode="decimal" value={draft.hours} onChange={(event) => patchDraft(task.id, { hours: event.target.value })}
+                                  className="mt-1 block w-20 rounded-lg border px-2 py-2 text-sm" placeholder="7,5"/>
+                              </label>
+                              <label className="text-xs text-slate-600">Quantité réalisée
+                                <input inputMode="decimal" value={draft.doneQuantity} onChange={(event) => patchDraft(task.id, { doneQuantity: event.target.value })}
+                                  className="mt-1 block w-24 rounded-lg border px-2 py-2 text-sm" placeholder={task.unite ?? "u"}/>
+                              </label>
+                              <button type="submit" disabled={workingId !== null}
+                                className="rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white disabled:opacity-50">Enregistrer</button>
+                            </div>
+                          </form>
+                          {mainRatios.length > 0 && (
+                            <form onSubmit={(event) => { event.preventDefault(); void saveActualMaterial(task, mainRatios.map((ratio) => ratio.id)); }}
+                              className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                              <div className="font-semibold">Enregistrer une consommation réelle</div>
+                              <div className="flex flex-wrap items-end gap-2">
+                                <label className="text-xs text-slate-600">Matériau
+                                  <select required value={draft.materialId} onChange={(event) => patchDraft(task.id, { materialId: event.target.value })}
+                                    className="mt-1 block rounded-lg border px-2 py-2 text-sm">
+                                    <option value="">Choisir</option>
+                                    {mainRatios.map((ratio) => <option key={ratio.id} value={ratio.id}>{ratio.material_name} ({ratio.ratio_unit})</option>)}
+                                  </select>
+                                </label>
+                                <label className="text-xs text-slate-600">Quantité consommée
+                                  <input required inputMode="decimal" value={draft.materialQuantity}
+                                    onChange={(event) => patchDraft(task.id, { materialQuantity: event.target.value })}
+                                    className="mt-1 block w-28 rounded-lg border px-2 py-2 text-sm"/>
+                                </label>
+                                <button type="submit" disabled={workingId !== null || !draft.intervenantId}
+                                  className="rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white disabled:opacity-50">Enregistrer</button>
+                              </div>
+                              <p className="text-xs text-slate-500">L'intervenant et la date sont ceux du pointage ci-dessus.</p>
+                            </form>
+                          )}
+                          <div className="rounded-lg bg-white p-3 text-xs text-slate-600">
+                            Ces résultats alimentent l'analyse de la bibliothèque. Les ratios de référence ne changent qu'après validation.
+                            {task.task_template_id && <a href={`/bibliotheque?templateId=${encodeURIComponent(task.task_template_id)}`}
+                              className="ml-2 font-semibold text-blue-700 hover:underline">Analyser le modèle</a>}
                           </div>
-                          <div className="sm:col-span-2">
-                            <button type="button" onClick={() => onTaskOpen(task.id)}
-                              className="rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white">
-                              Saisir les pointages, consommations et informations terrain
-                            </button>
-                          </div>
+                          <button type="button" onClick={() => onTaskOpen(task.id)}
+                            className="rounded-lg border border-blue-200 px-3 py-2 font-semibold text-blue-700">
+                            Documents, remarques et suivi terrain détaillé
+                          </button>
                         </div>
                       )}
                     </section>;
