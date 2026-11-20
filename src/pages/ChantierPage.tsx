@@ -776,6 +776,10 @@ export default function ChantierPage() {
   const navigate = useNavigate();
   const { locale, t } = useI18n();
   const detailSection = getChantierDetailSection(location.pathname);
+  const targetedTaskId = useMemo(
+    () => new URLSearchParams(location.search).get("taskId") ?? "",
+    [location.search],
+  );
   const targetedReserveId = useMemo(
     () => new URLSearchParams(location.search).get("reserveId") ?? "",
     [location.search],
@@ -3153,6 +3157,16 @@ export default function ChantierPage() {
     () => (taskDetailOpenId ? taskById.get(taskDetailOpenId) ?? null : null),
     [taskById, taskDetailOpenId],
   );
+
+  // Preserve global-search deep links without reopening the old chapter drawer.
+  useEffect(() => {
+    if (detailSection !== "execution" || !targetedTaskId || tasksLoading || !taskById.has(targetedTaskId)) return;
+    setTaskDetailOpenId(targetedTaskId);
+    const params = new URLSearchParams(location.search);
+    params.delete("taskId");
+    const search = params.toString();
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : "" }, { replace: true });
+  }, [detailSection, targetedTaskId, tasksLoading, taskById, location.search, location.pathname, navigate]);
 
   useEffect(() => {
     if (!taskDetailOpenId) return;
