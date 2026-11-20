@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import DevisImportDrawer, { type DevisImportResult } from "../../../components/chantiers/DevisImportDrawer";
 import PreparationChecklistTab from "../../../components/chantiers/PreparationChecklistTab";
@@ -339,7 +340,7 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-950">Organiser avant execution</div>
             <p className="mt-1 max-w-3xl text-sm text-slate-500">
-              Taches, devis, checklist et localisation restent en preparation. Les formulaires s'ouvrent dans des panneaux dedies.
+              Préparez les tâches et les contrôles avant le chantier. Retrouvez les mêmes tâches dans Produire pour le suivi quotidien.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -350,6 +351,10 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
             >
               Creer une tache
             </button>
+            <Link to={`/chantiers/${encodeURIComponent(chantierId)}/execution`}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+              Suivre les tâches en production
+            </Link>
             <button
               type="button"
               onClick={() => setDevisImportOpen(true)}
@@ -383,6 +388,12 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
               </button>
             </div>
             <div className="mt-3 text-sm text-slate-500">{loading ? "Chargement..." : card.helper}</div>
+            {card.key === "tasks" && (
+              <Link to={`/chantiers/${encodeURIComponent(chantierId)}/execution`}
+                className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:underline">
+                Retrouver ces tâches dans Produire
+              </Link>
+            )
           </article>
         ))}
       </section>
