@@ -6570,6 +6570,17 @@ export default function ChantierPage() {
                   <div className="mt-1 text-2xl font-bold text-emerald-950">{tasksLoading ? "…" : tasks.filter((task) => task.status === "FAIT").length}</div>
                 </div>
               </div>
+              <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-700">Outils liés aux tâches</summary>
+                <nav aria-label="Outils complémentaires du chantier" className="mt-3 flex flex-wrap gap-2 text-sm">
+                  <Link to={`/chantiers/${id}/retours-terrain`} className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Retours terrain</Link>
+                  <Link to={`/chantiers/${id}/qualite`} className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Réserves et qualité</Link>
+                  <Link to="/bibliotheque?q=chantier%20production" className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Modèles actifs</Link>
+                  <Link to="/bibliotheque?readiness=missing_preparation" className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Préparations des modèles</Link>
+                  <Link to="/bibliotheque?readiness=chantier_hidden" className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Modèles à activer</Link>
+                  <Link to={`/chantiers/${id}/preparation`} className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Besoins matériels</Link>
+                </nav>
+              </details>
               {tasks.length > 0 && filteredTasks.length === 0 && !tasksLoading && (
                 <button type="button" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
                   onClick={() => { setFilterIntervenant("__ALL__"); setFilterTaskQuality("__ALL__"); }}>
