@@ -214,7 +214,7 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
   const [items, setItems] = useState<ChantierRow[]>([]);
   const [scope, setScope] = useState<ChantierListFilter>("actifs");
   const [view, setView] = useState<ChantierListView>(initialView);
-  const [filters, setFilters] = useState<ChantierListFilters>(() => getInitialFilters(initialFocus));
+  const [filters, setFilters] = useState<ChantierListFilters>(() => getInitialFilters());
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewRow, setPreviewRow] = useState<ChantierDerived | null>(null);
   const [terrainFeedbackSummaries, setTerrainFeedbackSummaries] = useState<TerrainFeedbackSummaryByChantier>({});
