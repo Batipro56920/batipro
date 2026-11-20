@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import DevisImportDrawer, { type DevisImportResult } from "../../../components/chantiers/DevisImportDrawer";
 import PreparationChecklistTab from "../../../components/chantiers/PreparationChecklistTab";
+import DesignationsPreparationPanel from "../components/DesignationsPreparationPanel";
 import {
   createTask,
   deleteTasksByIds,
@@ -286,17 +287,17 @@ export default function ChantierPreparationSection({ chantierId, onTaskOpen }: {
 
   async function onDevisImported(result: DevisImportResult) {
     await refreshPreparationData(result.devisId);
-    setActiveDrawer("quotes");
+    setActiveDrawer("tasks");
     setToast({
       type: "ok",
-      msg: `Devis importe: ${result.linesInserted} ligne(s), ${result.tasksCreated} tache(s) creee(s).`,
+      msg: `Devis importé : ${result.linesInserted} désignation(s). Associez maintenant les tâches techniques nécessaires.`,
     });
   }
 
   const chapterCards = [
     {
       key: "tasks" as const,
-      title: "Taches",
+      title: "Tâches techniques",
       value: `${tasks.length}`,
       helper: `${taskStats.todo} a faire | ${taskStats.running} en cours | ${taskStats.done} terminees`,
       action: "Gerer",
@@ -349,7 +350,7 @@ export default function ChantierPreparationSection({ chantierId, onTaskOpen }: {
               onClick={() => setTaskDrawerOpen(true)}
               className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
-              Creer une tache
+              Créer une tâche technique
             </button>
             <Link to={`/chantiers/${encodeURIComponent(chantierId)}/execution`}
               className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
@@ -370,6 +371,9 @@ export default function ChantierPreparationSection({ chantierId, onTaskOpen }: {
           </div>
         ) : null}
       </section>
+
+      <DesignationsPreparationPanel chantierId={chantierId} devis={devis} tasks={tasks}
+        onRefresh={() => refreshPreparationData()} onTaskOpen={onTaskOpen} />
 
       <section className="grid gap-3 md:grid-cols-3">
         {chapterCards.map((card) => (
@@ -395,7 +399,7 @@ export default function ChantierPreparationSection({ chantierId, onTaskOpen }: {
 
       {activeDrawer === "tasks" ? (
         <section id="preparation-task-list" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-1 text-lg font-semibold text-slate-950">Tâches à préparer</h2>
+          <h2 className="mb-1 text-lg font-semibold text-slate-950">Tâches techniques à préparer</h2>
           <p className="mb-4 text-sm text-slate-500">Ouvrez une tâche pour accéder à toutes ses informations et la modifier ici.</p>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm text-slate-500">
@@ -408,7 +412,7 @@ export default function ChantierPreparationSection({ chantierId, onTaskOpen }: {
               onClick={() => setTaskDrawerOpen(true)}
               className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
-              Creer une tache
+              Créer une tâche technique
             </button>
           </div>
           <div className="space-y-3">
