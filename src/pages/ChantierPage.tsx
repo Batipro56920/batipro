@@ -1079,6 +1079,7 @@ export default function ChantierPage() {
     Record<string, TaskCocoPreparation>
   >({});
   const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
+  const [taskDetailEditing, setTaskDetailEditing] = useState(false);
   const [taskDetailTab, setTaskDetailTab] = useState<
     "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
   >("synthese");
@@ -2189,11 +2190,9 @@ export default function ChantierPage() {
     }
   }
 
-  // The preparation panel owns its own form state. Re-read the same Supabase
-  // task list on entering production so freshly created tasks are visible
-  // without a hard page refresh or a duplicated local cache.
+  // Preparation and production share the same Supabase tasks. Refresh for both views.
   useEffect(() => {
-    if (detailSection !== "execution" || !id) return;
+    if (!["execution", "preparation"].includes(detailSection) || !id) return;
     let active = true;
     setTasksLoading(true);
     setTasksError(null);
@@ -3161,6 +3160,7 @@ export default function ChantierPage() {
 
   useEffect(() => {
     setTaskDetailTab("synthese");
+    setTaskDetailEditing(false);
   }, [taskDetailOpenId, activeTaskDetail?.id, activeTaskDetail?.task_template_id]);
 
   useEffect(() => {
@@ -4085,17 +4085,19 @@ export default function ChantierPage() {
     }
   }
 
-  async function quickAssignTaskIntervenant(task: ChantierTaskRow, intervenantId: string) {
-    const nextIds = intervenantId ? [intervenantId] : [];
-    setTasks((prev) => prev.map((x) => (x.id === task.id ? { ...x, intervenant_id: intervenantId || null } : x)));
+  async function updateTaskAssigneesFromDetail(task: ChantierTaskRow, nextIdsInput: string[]) {
+    const nextIds = uniqueIds(nextIdsInput);
+    const previousIds = getTaskAssignedIntervenantIds(task);
+    if (nextIds.length === previousIds.length && nextIds.every((id) => previousIds.includes(id))) return;
     setTaskAssigneeIdsByTaskId((prev) => ({ ...prev, [task.id]: nextIds }));
+    setTasks((prev) => prev.map((row) => row.id === task.id ? { ...row, intervenant_id: nextIds[0] ?? null } : row));
     try {
-      await updateTask(task.id, { intervenant_id: intervenantId || null } as any);
+      await updateTask(task.id, { intervenant_id: nextIds[0] ?? null });
       await replaceTaskAssignees(task.id, nextIds);
-      setToast({ type: "ok", msg: intervenantId ? "Intervenant affecté." : "Intervenant retiré." });
-    } catch (e: any) {
+      setToast({ type: "ok", msg: "Affectations enregistrées. Vérifiez les dates dans le planning général." });
+    } catch (error) {
       await refreshTasksOnly();
-      setToast({ type: "error", msg: e?.message ?? "Erreur affectation intervenant." });
+      setToast({ type: "error", msg: error instanceof Error ? error.message : "Erreur d'affectation." });
     }
   }
 
@@ -4360,8 +4362,14 @@ export default function ChantierPage() {
       toNumberOrNull(editTaskMontantTotalDevisHt) ??
       (parsedPrixUnitaireDevis !== null ? parsedPrixUnitaireDevis * quantite : null);
     const parsedCoutEstime = toNumberOrNull(editTaskCoutEstimeHt);
-    const nextTaskPieceZoneIds = editTaskZoneId ? collectDescendantPieceIds(zones, editTaskZoneId) : [];
-    const nextTaskAnchorZoneId = findBestZoneAnchorForSelectedPieceIds(nextTaskPieceZoneIds, zones);
+    // Editing task identity must not erase several pieces already selected in the detail view.
+    const zoneWasChanged = editTaskZoneId !== (t.zone_id ?? "");
+    const nextTaskPieceZoneIds = zoneWasChanged
+      ? (editTaskZoneId ? collectDescendantPieceIds(zones, editTaskZoneId) : [])
+      : getTaskPieceZoneIds(t);
+    const nextTaskAnchorZoneId = zoneWasChanged
+      ? findBestZoneAnchorForSelectedPieceIds(nextTaskPieceZoneIds, zones)
+      : (t.zone_id ?? null);
 
     const patch = {
       titre,
@@ -4421,6 +4429,7 @@ export default function ChantierPage() {
       setToast({ type: "ok", msg: "Tâche mise à jour." });
       setTaskZoneIdsByTaskId((prev) => ({ ...prev, [t.id]: nextTaskPieceZoneIds }));
       setEditingTaskId(null);
+      setTaskDetailEditing(false);
     } catch (e: any) {
       await refreshTasksOnly();
       setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour tâche." });
@@ -5096,7 +5105,6 @@ export default function ChantierPage() {
               const detailTitle = getTaskDisplayTitle(activeTaskDetail);
               const detailTemplateLabel = getTaskLibraryLabel(activeTaskDetail);
               const detailLot = resolveTaskLotName(activeTaskDetail);
-              const detailAssignees = getTaskAssignedIntervenantNames(activeTaskDetail);
               const detailProgress = computeTaskProgress(activeTaskDetail);
               const detailPriority = taskPriorityMeta((activeTaskDetail as any).priorite);
               const detailQuality = ((activeTaskDetail as any).quality_status ?? "a_faire") as TaskQualityStatus;
@@ -5178,17 +5186,22 @@ export default function ChantierPage() {
                         </div>
                         <div className="mt-1 text-lg font-semibold text-slate-950">{detailProgress.displayPercent}%</div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTaskDetailOpenId(null);
+                      {!taskDetailEditing ? (
+                        <button type="button" onClick={() => {
                           startEditTask(activeTaskDetail);
-                          setTab("devis-taches");
-                        }}
-                        className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50"
-                      >
-                        Modifier
-                      </button>
+                          setTaskDetailEditing(true);
+                          setTaskDetailTab("synthese");
+                        }} className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">
+                          Modifier ici
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button type="button" disabled={savingTask} onClick={() => { cancelEditTask(); setTaskDetailEditing(false); }} className="rounded-xl border px-4 py-2 text-sm">Annuler</button>
+                          <button type="button" disabled={savingTask} onClick={() => void saveEditTask(activeTaskDetail)} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                            {savingTask ? "Enregistrement..." : "Enregistrer"}
+                          </button>
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() =>
@@ -5249,32 +5262,40 @@ export default function ChantierPage() {
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4 sm:col-span-2">
                           <div className="text-xs font-semibold text-slate-600">Tâche bibliothèque</div>
-                          <div className="mt-1 font-medium text-slate-950">{detailTemplateLabel}</div>
-                          <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                            <button type="button" onClick={() => {
-                              setTaskDetailOpenId(null);
-                              startEditTask(activeTaskDetail);
-                              setTab("devis-taches");
-                            }} className="font-semibold text-blue-700 hover:underline">
-                              Modifier la tâche et son lien bibliothèque
-                            </button>
-                            {activeTaskDetail.task_template_id && (
-                              <Link to={`/bibliotheque?templateId=${encodeURIComponent(activeTaskDetail.task_template_id)}`}
-                                target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
-                                Ouvrir le modèle bibliothèque
-                              </Link>
-                            )}
-                          </div>
+                          {taskDetailEditing ? (
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                              <label className="text-xs text-slate-600">Intitulé de la tâche
+                                <input className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editTitre} onChange={(e) => setEditTitre(e.target.value)} />
+                              </label>
+                              <label className="text-xs text-slate-600">Modèle bibliothèque
+                                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editTaskTemplateId} onChange={(e) => applyTaskTemplateToEditTask(e.target.value)}>
+                                  <option value="">Aucun modèle</option>
+                                  {taskLibraryTemplates.map((template) => <option key={template.id} value={template.id}>{template.titre}</option>)}
+                                </select>
+                              </label>
+                              <label className="text-xs text-slate-600">Lot
+                                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editLotSelection} onChange={(e) => { setEditLotSelection(e.target.value); setEditCorpsEtat(e.target.value); }}>
+                                  <option value="">Choisir un lot</option>
+                                  {lotOptions.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
+                                </select>
+                              </label>
+                              <label className="text-xs text-slate-600">Priorité
+                                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editTaskPriorite} onChange={(e) => setEditTaskPriorite(e.target.value as typeof editTaskPriorite)}>
+                                  <option value="basse">Basse</option><option value="normale">Normale</option><option value="haute">Haute</option><option value="urgente">Urgente</option>
+                                </select>
+                              </label>
+                            </div>
+                          ) : <div className="mt-1 font-medium text-slate-950">{detailTemplateLabel}</div>}
+                          {activeTaskDetail.task_template_id && (
+                            <Link to={`/bibliotheque?templateId=${encodeURIComponent(activeTaskDetail.task_template_id)}`}
+                              target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:underline">
+                              Consulter le modèle bibliothèque
+                            </Link>
+                          )}
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Lot</div>
                           <div className="mt-1 font-semibold text-slate-950">{detailLot}</div>
-                        </div>
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Intervenants</div>
-                          <div className="mt-1 font-semibold text-slate-950">
-                            {detailAssignees.join(", ") || "—"}
-                          </div>
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Validation qualité</div>
@@ -5346,16 +5367,11 @@ export default function ChantierPage() {
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Quantité</div>
-                          <div className="mt-1 font-semibold text-slate-950">
-                            {activeTaskDetail.quantite ?? "—"} {activeTaskDetail.unite ?? ""}
-                          </div>
+                          {taskDetailEditing ? <div className="mt-2 flex gap-2"><input aria-label="Quantité" inputMode="decimal" className="w-24 rounded-lg border px-2 py-1.5" value={editQuantite} onChange={(e) => setEditQuantite(e.target.value)} /><input aria-label="Unité" className="w-24 rounded-lg border px-2 py-1.5" value={editUnite} onChange={(e) => setEditUnite(e.target.value)} /></div> : <div className="mt-1 font-semibold text-slate-950">{activeTaskDetail.quantite ?? "—"} {activeTaskDetail.unite ?? ""}</div>}
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Temps prévu / passé</div>
-                          <div className="mt-1 font-semibold text-slate-950">
-                            {Math.round(Number(activeTaskDetail.temps_prevu_h ?? 0) * 100) / 100} h ·{" "}
-                            {Math.round(Number(activeTaskDetail.temps_reel_h ?? 0) * 100) / 100} h
-                          </div>
+                          {taskDetailEditing ? <input aria-label="Temps prévu en heures" inputMode="decimal" className="mt-2 w-full rounded-lg border px-2 py-1.5" value={editTempsPrevuH} onChange={(e) => setEditTempsPrevuH(e.target.value)} /> : <div className="mt-1 font-semibold text-slate-950">{Math.round(Number(activeTaskDetail.temps_prevu_h ?? 0) * 100) / 100} h prévues · {Math.round(Number(activeTaskDetail.temps_reel_h ?? 0) * 100) / 100} h réalisées</div>}
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Avancement</div>
@@ -5370,20 +5386,43 @@ export default function ChantierPage() {
                             {activeTaskDetail.date_fin ?? "—"}
                           </div>
                         </div>
+                        <div className="rounded-2xl bg-white p-4 sm:col-span-2">
+                          <div className="text-xs font-semibold text-slate-600">Intervenants affectés</div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {intervenants.map((person) => {
+                              const selected = getTaskAssignedIntervenantIds(activeTaskDetail).includes(person.id);
+                              return <label key={person.id} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
+                                <input type="checkbox" checked={selected} onChange={(event) => {
+                                  const current = getTaskAssignedIntervenantIds(activeTaskDetail);
+                                  void updateTaskAssigneesFromDetail(activeTaskDetail, event.target.checked
+                                    ? uniqueIds([...current, person.id])
+                                    : current.filter((id) => id !== person.id));
+                                }} />
+                                {person.nom}
+                              </label>;
+                            })}
+                            {intervenants.length === 0 && <span className="text-sm text-slate-500">Aucun intervenant inscrit sur le chantier.</span>}
+                          </div>
+                          <div className="mt-2 text-xs text-slate-500">L'affectation à la tâche est enregistrée ici. Les dates doivent être planifiées dans le planning général.</div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className={taskDetailTab === "synthese" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">4. État de préparation</div>
+                      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Intervenant</div>
-                          <select
-                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold text-slate-950"
-                            value={(taskAssigneeIdsByTaskId[activeTaskDetail.id] ?? uniqueIds([activeTaskDetail.intervenant_id]))[0] ?? ""}
-                            onChange={(event) => void quickAssignTaskIntervenant(activeTaskDetail, event.target.value)}
-                          >
-                            <option value="">Non affecté</option>
-                            {intervenants.map((it) => (
-                              <option key={it.id} value={it.id}>
-                                {it.nom}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="text-xs text-slate-500">Préparation technique</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {String((activeTaskDetail as any).description_technique ?? "").trim() || hasTaskCocoPreparation(taskOwnPreparation) ? "Contenu renseigné — à vérifier" : "À préparer"}
+                          </div>
+                          <button type="button" onClick={() => setTaskDetailTab("technique")} className="mt-2 text-xs font-semibold text-blue-700 hover:underline">Consulter la fiche technique</button>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Approvisionnement</div>
+                          <div className="mt-1 font-semibold text-slate-950">Commandes non vérifiées</div>
+                          <p className="mt-1 text-xs text-slate-500">Une estimation de matériaux n'atteste pas qu'ils sont commandés.</p>
+                          <Link to={`/chantiers/${encodeURIComponent(id ?? "")}/achats`} className="mt-2 inline-flex text-xs font-semibold text-blue-700 hover:underline">Consulter les achats du chantier</Link>
                         </div>
                       </div>
                     </section>
@@ -5883,7 +5922,7 @@ export default function ChantierPage() {
             <TerrainFeedbacksPage chantierId={id} embedded />
           </Suspense>
         )}
-        {detailSection === "preparation" && id && <ChantierPreparationSection chantierId={id} />}
+        {detailSection === "preparation" && id && <ChantierPreparationSection chantierId={id} onTaskOpen={(taskId) => { setTaskDetailOpenId(taskId); setTaskDetailTab("synthese"); }} />}
         {detailSection === "preparation" && id && (
           <ChantierLocationSection
             chantierId={id}
