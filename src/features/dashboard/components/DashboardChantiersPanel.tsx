@@ -2,13 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { DashboardSection } from "./DashboardSection";
-import { TONE_SOFT, TONE_SOLID } from "../../../design-system/tone";
+import { TONE_SOFT } from "../../../design-system/tone";
 import type {
   DashboardChantierCard,
   DashboardChantierView,
   DashboardMeasure,
   DashboardQueueFilter,
-  DashboardSeverity,
 } from "../types";
 
 type DashboardChantiersPanelProps = {
@@ -21,29 +20,18 @@ type DashboardChantiersPanelProps = {
   compact: boolean;
 };
 
-const SEVERITY_BAR: Record<DashboardSeverity, string> = {
-  critical: TONE_SOLID.danger,
-  action: TONE_SOLID.warning,
-  control: TONE_SOLID.success,
-};
-
 function ChantierRow({ chantier }: { chantier: DashboardChantierCard }) {
   return (
     <li>
       <Link
         to={chantier.href}
-        title={chantier.nextAction}
         className="bt-row relative grid grid-cols-1 items-center gap-x-5 gap-y-2.5 px-4 py-3 transition-colors duration-[90ms] hover:bg-interactive focus-visible:bg-interactive sm:px-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,auto)]"
       >
-        <span aria-hidden className={`absolute inset-y-0 left-0 w-[3px] ${SEVERITY_BAR[chantier.severity]}`} />
 
         <span className="min-w-0">
           <span className="bt-card-title block truncate text-ink">{chantier.name}</span>
           <span className="bt-secondary mt-0.5 block truncate text-muted">
             {chantier.client}
-            {chantier.itemCount > 0 ? (
-              <span className="bt-num"> · {chantier.itemCount} point{chantier.itemCount > 1 ? "s" : ""} ouvert{chantier.itemCount > 1 ? "s" : ""}</span>
-            ) : null}
           </span>
         </span>
 
@@ -51,15 +39,11 @@ function ChantierRow({ chantier }: { chantier: DashboardChantierCard }) {
           <span className="flex items-center gap-2.5">
             <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-track">
               <span
-                className={`block h-full rounded-full ${chantier.isLate ? "bg-warning" : "bg-primary"} transition-[width] duration-[240ms]`}
+                className="block h-full rounded-full bg-primary transition-[width] duration-[240ms]"
                 style={{ width: `${chantier.progress}%` }}
               />
             </span>
             <span className="bt-caption bt-num shrink-0 text-ink-secondary">{Math.round(chantier.progress)}%</span>
-          </span>
-          <span className={`bt-caption bt-num mt-1 block truncate ${chantier.isOverHours ? "text-warning-on" : "text-muted"}`}>
-            {chantier.nextAction}
-            {chantier.isOverHours ? " · dépassement" : ""}
           </span>
         </span>
 
@@ -67,11 +51,6 @@ function ChantierRow({ chantier }: { chantier: DashboardChantierCard }) {
           {/* Remplace StatusBadge (design-system.tsx), encore code en slate/blue :
               meme libelle et meme ton, mais rendu par les tokens semantiques. */}
           <span className={`bt-caption rounded-full px-2 py-0.5 ${TONE_SOFT[chantier.statusTone]}`}>{chantier.status}</span>
-          {chantier.isLate ? (
-            <span className={`bt-caption rounded-full px-2 py-0.5 ${TONE_SOFT.danger}`}>En retard</span>
-          ) : chantier.dueSoonLabel ? (
-            <span className={`bt-caption rounded-full px-2 py-0.5 ${TONE_SOFT.warning}`}>{chantier.dueSoonLabel}</span>
-          ) : null}
           <span className="bt-caption whitespace-nowrap text-muted">{chantier.finishLabel}</span>
         </span>
       </Link>
@@ -97,11 +76,10 @@ export function DashboardChantiersPanel({
   const collapsedRows = compact ? 3 : 5;
   const visibleChantiers = expanded ? chantiers : chantiers.slice(0, collapsedRows);
   const hiddenCount = chantiers.length - visibleChantiers.length;
-  const lateCount = chantiers.filter((chantier) => chantier.isLate).length;
 
   const summary = chantiers.length === 0
     ? "Aucun chantier actif"
-    : `${chantiers.length} actif${chantiers.length > 1 ? "s" : ""}${lateCount > 0 ? ` · ${lateCount} en retard` : ""}`;
+    : `${chantiers.length} actif${chantiers.length > 1 ? "s" : ""}`;
 
   return (
     <DashboardSection
@@ -158,12 +136,12 @@ export function DashboardChantiersPanel({
           annonces, ce qui evite un bandeau qui apparait et disparait. */}
       <p className="bt-caption border-b border-subtle px-4 py-2 text-muted sm:px-5">
         {chantierView === "priorite"
-          ? "Triés par priorité — les lignes ouvrent la fiche chantier."
+          ? "Les lignes ouvrent la fiche chantier."
           : chantierView === "recents"
             ? "Triés par date de création — les lignes ouvrent la fiche chantier."
             : chantierView === "avancement"
               ? "Triés par avancement croissant — les lignes ouvrent l’onglet Exécution."
-              : "Triés par dépassement d’heures — les lignes ouvrent l’onglet Exécution."}
+              : "Triés par heures — les lignes ouvrent l’onglet Exécution."}
       </p>
 
       {chantiers.length === 0 ? (
@@ -174,7 +152,7 @@ export function DashboardChantiersPanel({
           <p className="bt-secondary text-muted">
             {chantierView === "heures"
               ? "Renseignez des heures prévues pour suivre les dépassements."
-              : "Créez un chantier pour alimenter les priorités."}
+              : "Créez un chantier pour démarrer."}
           </p>
           <Link to="/chantiers/nouveau">
             <Button variant="primary" size="sm">Nouveau chantier</Button>
