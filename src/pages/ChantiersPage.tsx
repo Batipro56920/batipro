@@ -43,12 +43,12 @@ const HEADER_BY_VIEW: Record<ChantierListView, { eyebrow: string; title: string;
   list: {
     eyebrow: "Production",
     title: "Production chantier",
-    description: "Pilotez vos chantiers, avancement, alertes et équipes.",
+    description: "Consultez vos chantiers, leur avancement et les équipes.",
   },
   cards: {
     eyebrow: "Production",
     title: "Vue cartes chantiers",
-    description: "Balayez rapidement les chantiers actifs, clients, statuts et alertes.",
+    description: "Parcourez les chantiers actifs, clients et statuts.",
   },
   planning: {
     eyebrow: "Planning",
@@ -81,7 +81,7 @@ const HEADER_BY_FOCUS: Record<ChantierListFocus, { eyebrow: string; title: strin
   reserves: {
     eyebrow: "Qualité",
     title: "Réserves chantier",
-    description: "Priorisez les chantiers avec alertes, retours terrain ou retard puis ouvrez directement la qualité et les réserves.",
+    description: "Ouvrez les chantiers et consultez directement leurs réserves.",
   },
   time: {
     eyebrow: "Temps",
@@ -103,7 +103,7 @@ const FOCUS_GUIDANCE: Record<ChantierListFocus, { title: string; description: st
   },
   reserves: {
     title: "Parcours réserves",
-    description: "La vue est placée sur le kanban et le filtre Alertes à traiter afin de rapprocher retours terrain, retard, qualité et réserves chantier.",
+    description: "Ouvrez directement le suivi qualité et les réserves de chaque chantier.",
     cta: "Ouvrir mène à Qualité.",
   },
   time: {
@@ -119,7 +119,6 @@ const FOCUS_GUIDANCE: Record<ChantierListFocus, { title: string; description: st
 };
 
 function getInitialFilters(initialFocus: ChantierListFocus | undefined): ChantierListFilters {
-  if (initialFocus === "reserves" || initialFocus === "time") return { ...DEFAULT_FILTERS, period: "alerts" };
   return DEFAULT_FILTERS;
 }
 
@@ -289,13 +288,6 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
       return;
     }
 
-    if (key === "late") {
-      setScope("actifs");
-      setFilters({ ...DEFAULT_FILTERS, period: "late" });
-      setView("planning");
-      return;
-    }
-
     if (key === "terrainFeedback") {
       setScope("actifs");
       setFilters({
@@ -307,8 +299,8 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
     }
 
     setScope("actifs");
-    setFilters({ ...DEFAULT_FILTERS, period: "alerts" });
-    setView("kanban");
+    setFilters(DEFAULT_FILTERS);
+    setView("list");
   }
 
   function toggleSelection(id: string) {
