@@ -1079,6 +1079,9 @@ export default function ChantierPage() {
     Record<string, TaskCocoPreparation>
   >({});
   const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
+  const [taskDetailTemplateId, setTaskDetailTemplateId] = useState("");
+  const [taskDetailTemplateSaving, setTaskDetailTemplateSaving] = useState(false);
+  const [taskDetailTemplateError, setTaskDetailTemplateError] = useState<string | null>(null);
   const [taskDetailTab, setTaskDetailTab] = useState<
     "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
   >("synthese");
@@ -3175,12 +3178,10 @@ export default function ChantierPage() {
   }, [activeTaskDetail, taskDetailOpenId]);
 
   useEffect(() => {
-    if (!taskDetailOpenId) {
-      setTaskDetailTab("synthese");
-      return;
-    }
     setTaskDetailTab("synthese");
-  }, [taskDetailOpenId]);
+    setTaskDetailTemplateId(activeTaskDetail?.task_template_id ?? "");
+    setTaskDetailTemplateError(null);
+  }, [taskDetailOpenId, activeTaskDetail?.id, activeTaskDetail?.task_template_id]);
 
   useEffect(() => {
     if (!activeTaskDetail) return;
@@ -3988,6 +3989,47 @@ export default function ChantierPage() {
       setToast({ type: "error", msg: e?.message ?? "Erreur ajout tâche." });
     } finally {
       setAddingTask(false);
+    }
+  }
+
+  /**
+   * Change only the library reference on a chantier task. Existing task title,
+   * hours, pointages, cost estimates, work progress and chantier preparation
+   * are deliberately preserved; linking a template must not re-import its
+   * quantities or overwrite work already performed.
+   */
+  async function saveTaskDetailLibraryLink(task: ChantierTaskRow) {
+    if (taskDetailTemplateSaving) return;
+    const selectedId = taskDetailTemplateId;
+    const selected = selectedId ? taskLibraryTemplateById.get(selectedId) : null;
+    if (selectedId && !selected) {
+      setTaskDetailTemplateError("Ce modèle n'est plus disponible dans la bibliothèque. Rechargez la liste avant de réessayer.");
+      return;
+    }
+    const nextLabel = selected?.titre ?? null;
+    setTaskDetailTemplateSaving(true);
+    setTaskDetailTemplateError(null);
+    try {
+      const updated = await updateTask(task.id, {
+        task_template_id: selectedId || null,
+        task_template_label: nextLabel,
+      });
+      setTasks((previous) => previous.map((item) => item.id === task.id ? { ...item, ...updated } : item));
+      await recordChantierActivity({
+        actionType: "updated",
+        entityType: "task",
+        entityId: task.id,
+        reason: "Référence bibliothèque modifiée",
+        changes: {
+          from_task_template_id: task.task_template_id,
+          task_template_id: selectedId || null,
+        },
+      });
+      setToast({ type: "ok", msg: selected ? "Tâche bibliothèque associée." : "Lien bibliothèque retiré." });
+    } catch (error) {
+      setTaskDetailTemplateError(error instanceof Error ? error.message : "Impossible de modifier le lien bibliothèque.");
+    } finally {
+      setTaskDetailTemplateSaving(false);
     }
   }
 
@@ -5194,9 +5236,6 @@ export default function ChantierPage() {
                       <h2 className="mt-2 text-2xl font-semibold text-slate-950">{detailTitle}</h2>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                          {detailTemplateLabel}
-                        </span>
-                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                           {detailLot}
                         </span>
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
@@ -5283,9 +5322,63 @@ export default function ChantierPage() {
                         1. Vue synthèse
                       </div>
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Tâche bibliothèque</div>
-                          <div className="mt-1 font-semibold text-slate-950">{detailTemplateLabel}</div>
+                        <div className="rounded-2xl bg-white p-4 sm:col-span-2">
+                          <label htmlFor="task-detail-library-template" className="text-xs font-semibold text-slate-600">
+                            Tâche liée à la bibliothèque
+                          </label>
+                          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <select
+                              id="task-detail-library-template"
+                              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900"
+                              value={taskDetailTemplateId}
+                              onChange={(event) => {
+                                setTaskDetailTemplateId(event.target.value);
+                                setTaskDetailTemplateError(null);
+                              }}
+                              disabled={taskDetailTemplateSaving}
+                            >
+                              <option value="">Aucune tâche bibliothèque</option>
+                              {activeTaskDetail.task_template_id &&
+                                !taskLibraryTemplateById.has(activeTaskDetail.task_template_id) && (
+                                  <option value={activeTaskDetail.task_template_id}>
+                                    Modèle précédent indisponible : {detailTemplateLabel}
+                                  </option>
+                                )}
+                              {taskLibraryTemplates.map((template) => (
+                                <option key={template.id} value={template.id}>
+                                  {template.titre}{template.lot ? ` · ${template.lot}` : ""}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={taskDetailTemplateSaving || taskDetailTemplateId === (activeTaskDetail.task_template_id ?? "")}
+                              onClick={() => void saveTaskDetailLibraryLink(activeTaskDetail)}
+                            >
+                              {taskDetailTemplateSaving ? "Enregistrement..." : "Enregistrer le lien"}
+                            </button>
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-3">
+                            {activeTaskDetail.task_template_id ? (
+                              <Link
+                                to={`/bibliotheque?templateId=${encodeURIComponent(activeTaskDetail.task_template_id)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm font-semibold text-blue-700 hover:underline"
+                              >
+                                Ouvrir et modifier la tâche bibliothèque
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-slate-500">Aucun modèle associé à cette tâche chantier.</span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            Le changement de modèle ne remplace pas le titre, les quantités, le temps passé ni l'avancement de cette tâche.
+                          </p>
+                          {taskDetailTemplateError && (
+                            <p role="alert" className="mt-2 text-sm text-red-700">{taskDetailTemplateError}</p>
+                          )}
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Lot</div>
@@ -7013,14 +7106,7 @@ export default function ChantierPage() {
                   const taskZoneLabel = resolveTaskZoneSummary(t);
                   const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
                   const taskValidated = isTaskAdminValidated(t);
-                  const taskTemplateLabel = getTaskLibraryLabel(t);
                   const taskRepriseReason = String((t as any).reprise_reason ?? "").trim();
-                  const taskBudgetVente = toNumberOrNull((t as any).montant_total_devis_ht);
-                  const taskBudgetCout = toNumberOrNull((t as any).cout_estime_ht);
-                  const taskBudgetMarge =
-                    taskBudgetVente !== null && taskBudgetCout !== null
-                      ? Math.round((taskBudgetVente - taskBudgetCout) * 100) / 100
-                      : null;
 
                   return (
                     <div
@@ -7056,9 +7142,6 @@ export default function ChantierPage() {
                                 >
                                   {displayTitreClean}
                                 </button>
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-                                  {taskTemplateLabel}
-                                </span>
                               </div>
                               <div className="mt-3 grid gap-3 md:grid-cols-2">
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -7078,13 +7161,6 @@ export default function ChantierPage() {
                                   </div>
                                 </div>
                               </div>
-                              {taskBudgetMarge !== null ? (
-                                <div className="mt-2 text-xs">
-                                  <span className={["rounded-full border px-2 py-1", taskBudgetMarge < 0 ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"].join(" ")}>
-                                    {taskBudgetMarge < 0 ? "Budget en alerte" : "Budget OK"}
-                                  </span>
-                                </div>
-                              ) : null}
                               {taskRepriseReason && taskQuality === "a_reprendre" ? (
                                 <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                                   Reprise : {taskRepriseReason}
