@@ -1079,9 +1079,6 @@ export default function ChantierPage() {
     Record<string, TaskCocoPreparation>
   >({});
   const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
-  const [taskDetailTemplateId, setTaskDetailTemplateId] = useState("");
-  const [taskDetailTemplateSaving, setTaskDetailTemplateSaving] = useState(false);
-  const [taskDetailTemplateError, setTaskDetailTemplateError] = useState<string | null>(null);
   const [taskDetailTab, setTaskDetailTab] = useState<
     "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
   >("synthese");
@@ -3114,15 +3111,8 @@ export default function ChantierPage() {
       const qty = toNumberOrNull(newQuantite) ?? toNumberOrNull(template.quantite_defaut) ?? 1;
       setNewTempsPrevuH(String(Math.round(qty * Number(template.temps_prevu_par_unite_h) * 100) / 100));
     }
-    if (
-      template.cout_reference_unitaire_ht !== null &&
-      template.cout_reference_unitaire_ht !== undefined
-    ) {
-      const qty = toNumberOrNull(newQuantite) ?? toNumberOrNull(template.quantite_defaut) ?? 1;
-      setNewTaskCoutEstimeHt(
-        String(Math.round(qty * Number(template.cout_reference_unitaire_ht) * 100) / 100),
-      );
-    }
+    // Un prix de référence bibliothèque n'est pas un coût de revient calculé.
+    setNewTaskCoutEstimeHt("");
     if (!newTitre.trim()) {
       setNewTitre(template.titre ?? "");
     }
@@ -3142,15 +3132,7 @@ export default function ChantierPage() {
     setEditUnite(template.unite ?? "");
     setEditTaskDescriptionTechnique(template.description_technique ?? "");
     setEditTaskCaracteristiques((template.caracteristiques ?? []).join("\n"));
-    if (
-      template.cout_reference_unitaire_ht !== null &&
-      template.cout_reference_unitaire_ht !== undefined
-    ) {
-      const qty = toNumberOrNull(editQuantite) ?? toNumberOrNull(template.quantite_defaut) ?? 1;
-      setEditTaskCoutEstimeHt(
-        String(Math.round(qty * Number(template.cout_reference_unitaire_ht) * 100) / 100),
-      );
-    }
+    // Le changement de modèle ne modifie pas le coût enregistré sur le chantier.
     if (!editTitre.trim()) {
       setEditTitre(template.titre ?? "");
     }
@@ -3179,8 +3161,6 @@ export default function ChantierPage() {
 
   useEffect(() => {
     setTaskDetailTab("synthese");
-    setTaskDetailTemplateId(activeTaskDetail?.task_template_id ?? "");
-    setTaskDetailTemplateError(null);
   }, [taskDetailOpenId, activeTaskDetail?.id, activeTaskDetail?.task_template_id]);
 
   useEffect(() => {
@@ -3830,14 +3810,7 @@ export default function ChantierPage() {
     const parsedMontantTotalDevis =
       toNumberOrNull(newTaskMontantTotalDevisHt) ??
       (parsedPrixUnitaireDevis !== null ? parsedPrixUnitaireDevis * quantite : null);
-    const parsedCoutEstime =
-      toNumberOrNull(newTaskCoutEstimeHt) ??
-      (() => {
-        const coutReference =
-          taskLibraryTemplateById.get(newTaskTemplateId)?.cout_reference_unitaire_ht ?? null;
-        return coutReference === null ? null : coutReference * quantite;
-      })() ??
-      null;
+    const parsedCoutEstime = toNumberOrNull(newTaskCoutEstimeHt);
     const newTaskCaracteristiquesList = parseTaskCaracteristiquesText(newTaskCaracteristiques);
 
     const tempId = `temp-${crypto.randomUUID()}`;
@@ -3989,47 +3962,6 @@ export default function ChantierPage() {
       setToast({ type: "error", msg: e?.message ?? "Erreur ajout tâche." });
     } finally {
       setAddingTask(false);
-    }
-  }
-
-  /**
-   * Change only the library reference on a chantier task. Existing task title,
-   * hours, pointages, cost estimates, work progress and chantier preparation
-   * are deliberately preserved; linking a template must not re-import its
-   * quantities or overwrite work already performed.
-   */
-  async function saveTaskDetailLibraryLink(task: ChantierTaskRow) {
-    if (taskDetailTemplateSaving) return;
-    const selectedId = taskDetailTemplateId;
-    const selected = selectedId ? taskLibraryTemplateById.get(selectedId) : null;
-    if (selectedId && !selected) {
-      setTaskDetailTemplateError("Ce modèle n'est plus disponible dans la bibliothèque. Rechargez la liste avant de réessayer.");
-      return;
-    }
-    const nextLabel = selected?.titre ?? null;
-    setTaskDetailTemplateSaving(true);
-    setTaskDetailTemplateError(null);
-    try {
-      const updated = await updateTask(task.id, {
-        task_template_id: selectedId || null,
-        task_template_label: nextLabel,
-      });
-      setTasks((previous) => previous.map((item) => item.id === task.id ? { ...item, ...updated } : item));
-      await recordChantierActivity({
-        actionType: "updated",
-        entityType: "task",
-        entityId: task.id,
-        reason: "Référence bibliothèque modifiée",
-        changes: {
-          from_task_template_id: task.task_template_id,
-          task_template_id: selectedId || null,
-        },
-      });
-      setToast({ type: "ok", msg: selected ? "Tâche bibliothèque associée." : "Lien bibliothèque retiré." });
-    } catch (error) {
-      setTaskDetailTemplateError(error instanceof Error ? error.message : "Impossible de modifier le lien bibliothèque.");
-    } finally {
-      setTaskDetailTemplateSaving(false);
     }
   }
 
@@ -4427,14 +4359,7 @@ export default function ChantierPage() {
     const parsedMontantTotalDevis =
       toNumberOrNull(editTaskMontantTotalDevisHt) ??
       (parsedPrixUnitaireDevis !== null ? parsedPrixUnitaireDevis * quantite : null);
-    const parsedCoutEstime =
-      toNumberOrNull(editTaskCoutEstimeHt) ??
-      (() => {
-        const coutReference =
-          taskLibraryTemplateById.get(editTaskTemplateId)?.cout_reference_unitaire_ht ?? null;
-        return coutReference === null ? null : coutReference * quantite;
-      })() ??
-      null;
+    const parsedCoutEstime = toNumberOrNull(editTaskCoutEstimeHt);
     const nextTaskPieceZoneIds = editTaskZoneId ? collectDescendantPieceIds(zones, editTaskZoneId) : [];
     const nextTaskAnchorZoneId = findBestZoneAnchorForSelectedPieceIds(nextTaskPieceZoneIds, zones);
 
@@ -5323,62 +5248,23 @@ export default function ChantierPage() {
                       </div>
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4 sm:col-span-2">
-                          <label htmlFor="task-detail-library-template" className="text-xs font-semibold text-slate-600">
-                            Tâche liée à la bibliothèque
-                          </label>
-                          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <select
-                              id="task-detail-library-template"
-                              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900"
-                              value={taskDetailTemplateId}
-                              onChange={(event) => {
-                                setTaskDetailTemplateId(event.target.value);
-                                setTaskDetailTemplateError(null);
-                              }}
-                              disabled={taskDetailTemplateSaving}
-                            >
-                              <option value="">Aucune tâche bibliothèque</option>
-                              {activeTaskDetail.task_template_id &&
-                                !taskLibraryTemplateById.has(activeTaskDetail.task_template_id) && (
-                                  <option value={activeTaskDetail.task_template_id}>
-                                    Modèle précédent indisponible : {detailTemplateLabel}
-                                  </option>
-                                )}
-                              {taskLibraryTemplates.map((template) => (
-                                <option key={template.id} value={template.id}>
-                                  {template.titre}{template.lot ? ` · ${template.lot}` : ""}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              className="rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                              disabled={taskDetailTemplateSaving || taskDetailTemplateId === (activeTaskDetail.task_template_id ?? "")}
-                              onClick={() => void saveTaskDetailLibraryLink(activeTaskDetail)}
-                            >
-                              {taskDetailTemplateSaving ? "Enregistrement..." : "Enregistrer le lien"}
+                          <div className="text-xs font-semibold text-slate-600">Tâche bibliothèque</div>
+                          <div className="mt-1 font-medium text-slate-950">{detailTemplateLabel}</div>
+                          <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                            <button type="button" onClick={() => {
+                              setTaskDetailOpenId(null);
+                              startEditTask(activeTaskDetail);
+                              setTab("devis-taches");
+                            }} className="font-semibold text-blue-700 hover:underline">
+                              Modifier la tâche et son lien bibliothèque
                             </button>
-                          </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-3">
-                            {activeTaskDetail.task_template_id ? (
-                              <Link
-                                to={`/bibliotheque?templateId=${encodeURIComponent(activeTaskDetail.task_template_id)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm font-semibold text-blue-700 hover:underline"
-                              >
-                                Ouvrir et modifier la tâche bibliothèque
+                            {activeTaskDetail.task_template_id && (
+                              <Link to={`/bibliotheque?templateId=${encodeURIComponent(activeTaskDetail.task_template_id)}`}
+                                target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+                                Ouvrir le modèle bibliothèque
                               </Link>
-                            ) : (
-                              <span className="text-xs text-slate-500">Aucun modèle associé à cette tâche chantier.</span>
                             )}
                           </div>
-                          <p className="mt-2 text-xs text-slate-500">
-                            Le changement de modèle ne remplace pas le titre, les quantités, le temps passé ni l'avancement de cette tâche.
-                          </p>
-                          {taskDetailTemplateError && (
-                            <p role="alert" className="mt-2 text-sm text-red-700">{taskDetailTemplateError}</p>
-                          )}
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Lot</div>
@@ -5667,13 +5553,14 @@ export default function ChantierPage() {
                           </div>
                         </div>
                         <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Coût estimé HT</div>
+                          <div className="text-xs text-slate-500">Coût provisoire saisi HT (non vérifié)</div>
                           <div className="mt-1 font-semibold text-slate-950">
-                            {formatTaskMoney(detailCout)}
+                            {detailCout === null ? "Non chiffré" : formatTaskMoney(detailCout)}
                           </div>
+                          <p className="mt-1 text-xs text-amber-700">Ce montant n'est pas encore calculé à partir du détail main-d'œuvre, matériaux, consommables, matériel et frais généraux.</p>
                         </div>
                         <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Marge estimée</div>
+                          <div className="text-xs text-slate-500">Marge indicative (non vérifiée)</div>
                           <div className="mt-1 font-semibold text-slate-950">
                             {formatTaskMoney(detailMarge)}
                           </div>
@@ -6886,7 +6773,7 @@ export default function ChantierPage() {
                           />
                         </label>
                         <label className="space-y-1 text-xs text-slate-600">
-                          <div>Coût estimé HT</div>
+                          <div>Coût provisoire saisi HT (non calculé)</div>
                           <input
                             className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                             inputMode="decimal"
@@ -7345,7 +7232,7 @@ export default function ChantierPage() {
                                   />
                                 </label>
                                 <label className="space-y-1 text-xs text-slate-600">
-                                  <div>Coût estimé HT</div>
+                                  <div>Coût provisoire saisi HT (non calculé)</div>
                                   <input
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                                     inputMode="decimal"
