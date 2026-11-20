@@ -7023,13 +7023,6 @@ export default function ChantierPage() {
                                 
                                 <button
                                   type="button"
-                                  onClick={() => startTaskProgressEdit(t)}
-                                  className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
-                                >
-                                  Ajuster
-                                </button>
-                                <button
-                                  type="button"
                                   onClick={() => setTaskDetailOpenId(t.id)}
                                   className="rounded-xl bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800"
                                 >
