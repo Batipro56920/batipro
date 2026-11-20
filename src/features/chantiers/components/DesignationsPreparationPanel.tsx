@@ -347,6 +347,15 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                     const trackedRatios = task.task_template_id && preparation
                       ? preparation.materialsByTemplateId[task.task_template_id] ?? [] : [];
                     const draft = getDraft(task.id);
+                    const laborCostKnown = taskEntries.every((entry) => entry.hourly_cost_snapshot_ht !== null);
+                    const laborActualHt = laborCostKnown ? taskEntries.reduce((sum, entry) =>
+                      sum + Number(entry.duration_hours ?? 0) * Number(entry.hourly_cost_snapshot_ht ?? 0), 0) : null;
+                    const materialCostKnown = materialRows.every((used) => {
+                      const ratio = trackedRatios.find((row) => row.id === used.material_ratio_id);
+                      return ratio?.purchase_price_ht !== null && ratio?.purchase_price_ht !== undefined;
+                    });
+                    const materialActualHt = materialCostKnown ? materialRows.reduce((sum, used) =>
+                      sum + used.quantite_consommee * Number(trackedRatios.find((ratio) => ratio.id === used.material_ratio_id)?.purchase_price_ht ?? 0), 0) : null;
                     return <section key={task.id} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <button type="button" onClick={() => onTaskOpen(task.id)} className="font-semibold text-blue-700 hover:underline">
@@ -468,6 +477,16 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                               {!trackedRatios.length && <p className="mt-1 text-xs text-slate-500">Aucune ressource à consommation renseignée dans le modèle.</p>}
                               <p className="mt-2 text-xs text-slate-500">Les achats et les commandes ne sont pas comptés comme consommations.</p>
                             </div>
+                          </div>
+                          <div className="rounded-lg bg-white p-3">
+                            <div className="font-semibold">Coûts réellement mesurés (hors amortissement non imputé)</div>
+                            <div className="mt-1 text-xs text-slate-600">
+                              Main-d'œuvre : {laborActualHt === null ? "Tarifs de certains pointages inconnus" : eur(laborActualHt)} ·
+                              Matières consommées : {materialActualHt === null ? "Prix d'achat incomplets" : eur(materialActualHt)}
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Les dépenses non pointées, les frais indirects et le matériel non imputé ne sont pas inclus : ceci n'est pas encore un coût réel complet.
+                            </p>
                           </div>
                           <form onSubmit={(event) => { event.preventDefault(); void saveRealTime(task); }}
                             className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
