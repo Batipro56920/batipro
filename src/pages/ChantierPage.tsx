@@ -4085,20 +4085,6 @@ export default function ChantierPage() {
     }
   }
 
-  async function quickAssignTaskIntervenant(task: ChantierTaskRow, intervenantId: string) {
-    const nextIds = intervenantId ? [intervenantId] : [];
-    setTasks((prev) => prev.map((x) => (x.id === task.id ? { ...x, intervenant_id: intervenantId || null } : x)));
-    setTaskAssigneeIdsByTaskId((prev) => ({ ...prev, [task.id]: nextIds }));
-    try {
-      await updateTask(task.id, { intervenant_id: intervenantId || null } as any);
-      await replaceTaskAssignees(task.id, nextIds);
-      setToast({ type: "ok", msg: intervenantId ? "Intervenant affecté." : "Intervenant retiré." });
-    } catch (e: any) {
-      await refreshTasksOnly();
-      setToast({ type: "error", msg: e?.message ?? "Erreur affectation intervenant." });
-    }
-  }
-
   async function updateTaskAssigneesFromDetail(task: ChantierTaskRow, nextIdsInput: string[]) {
     const nextIds = uniqueIds(nextIdsInput);
     const previousIds = getTaskAssignedIntervenantIds(task);
@@ -5119,7 +5105,6 @@ export default function ChantierPage() {
               const detailTitle = getTaskDisplayTitle(activeTaskDetail);
               const detailTemplateLabel = getTaskLibraryLabel(activeTaskDetail);
               const detailLot = resolveTaskLotName(activeTaskDetail);
-              const detailAssignees = getTaskAssignedIntervenantNames(activeTaskDetail);
               const detailProgress = computeTaskProgress(activeTaskDetail);
               const detailPriority = taskPriorityMeta((activeTaskDetail as any).priorite);
               const detailQuality = ((activeTaskDetail as any).quality_status ?? "a_faire") as TaskQualityStatus;
@@ -5419,6 +5404,25 @@ export default function ChantierPage() {
                             {intervenants.length === 0 && <span className="text-sm text-slate-500">Aucun intervenant inscrit sur le chantier.</span>}
                           </div>
                           <div className="mt-2 text-xs text-slate-500">L'affectation à la tâche est enregistrée ici. Les dates doivent être planifiées dans le planning général.</div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className={taskDetailTab === "synthese" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">4. État de préparation</div>
+                      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Préparation technique</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {String((activeTaskDetail as any).description_technique ?? "").trim() || hasTaskCocoPreparation(taskOwnPreparation) ? "Contenu renseigné — à vérifier" : "À préparer"}
+                          </div>
+                          <button type="button" onClick={() => setTaskDetailTab("technique")} className="mt-2 text-xs font-semibold text-blue-700 hover:underline">Consulter la fiche technique</button>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Approvisionnement</div>
+                          <div className="mt-1 font-semibold text-slate-950">Commandes non vérifiées</div>
+                          <p className="mt-1 text-xs text-slate-500">Une estimation de matériaux n'atteste pas qu'ils sont commandés.</p>
+                          <Link to={`/chantiers/${encodeURIComponent(id ?? "")}/achats`} className="mt-2 inline-flex text-xs font-semibold text-blue-700 hover:underline">Consulter les achats du chantier</Link>
                         </div>
                       </div>
                     </section>
