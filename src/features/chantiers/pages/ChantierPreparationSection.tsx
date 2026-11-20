@@ -393,7 +393,7 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
                 className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:underline">
                 Retrouver ces tâches dans Produire
               </Link>
-            )
+            )}
           </article>
         ))}
       </section>
