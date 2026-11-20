@@ -209,7 +209,6 @@ import ChantierPreparationSection from "../features/chantiers/pages/ChantierPrep
 import ChantierMaterialsSection from "../features/chantiers/pages/ChantierMaterialsSection";
 import ChantierPurchasesSection from "../features/chantiers/pages/ChantierPurchasesSection";
 import ChantierReservesSection from "../features/chantiers/pages/ChantierReservesSection";
-import ChantierTasksQuotesSection from "../features/chantiers/pages/ChantierTasksQuotesSection";
 import ChantierTimeSection from "../features/chantiers/pages/ChantierTimeSection";
 import ChantierUnforeseenSection from "../features/chantiers/pages/ChantierUnforeseenSection";
 import ChantierVisitSection from "../features/chantiers/pages/ChantierVisitSection";
@@ -777,6 +776,10 @@ export default function ChantierPage() {
   const navigate = useNavigate();
   const { locale, t } = useI18n();
   const detailSection = getChantierDetailSection(location.pathname);
+  const targetedTaskId = useMemo(
+    () => new URLSearchParams(location.search).get("taskId") ?? "",
+    [location.search],
+  );
   const targetedReserveId = useMemo(
     () => new URLSearchParams(location.search).get("reserveId") ?? "",
     [location.search],
@@ -1076,6 +1079,9 @@ export default function ChantierPage() {
     Record<string, TaskCocoPreparation>
   >({});
   const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
+  const [taskDetailTemplateId, setTaskDetailTemplateId] = useState("");
+  const [taskDetailTemplateSaving, setTaskDetailTemplateSaving] = useState(false);
+  const [taskDetailTemplateError, setTaskDetailTemplateError] = useState<string | null>(null);
   const [taskDetailTab, setTaskDetailTab] = useState<
     "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
   >("synthese");
@@ -2186,6 +2192,24 @@ export default function ChantierPage() {
     }
   }
 
+  // The preparation panel owns its own form state. Re-read the same Supabase
+  // task list on entering production so freshly created tasks are visible
+  // without a hard page refresh or a duplicated local cache.
+  useEffect(() => {
+    if (detailSection !== "execution" || !id) return;
+    let active = true;
+    setTasksLoading(true);
+    setTasksError(null);
+    void Promise.all([refreshTasksOnly(), refreshDevisOnly()])
+      .catch((error: unknown) => {
+        if (active) setTasksError(error instanceof Error ? error.message : "Impossible de charger les tâches du chantier.");
+      })
+      .finally(() => {
+        if (active) setTasksLoading(false);
+      });
+    return () => { active = false; };
+  }, [detailSection, id]);
+
   async function refreshMateriel() {
     if (!id) return;
     setMaterielLoading(true);
@@ -3137,6 +3161,16 @@ export default function ChantierPage() {
     [taskById, taskDetailOpenId],
   );
 
+  // Preserve global-search deep links without reopening the old chapter drawer.
+  useEffect(() => {
+    if (detailSection !== "execution" || !targetedTaskId || tasksLoading || !taskById.has(targetedTaskId)) return;
+    setTaskDetailOpenId(targetedTaskId);
+    const params = new URLSearchParams(location.search);
+    params.delete("taskId");
+    const search = params.toString();
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : "" }, { replace: true });
+  }, [detailSection, targetedTaskId, tasksLoading, taskById, location.search, location.pathname, navigate]);
+
   useEffect(() => {
     if (!taskDetailOpenId) return;
     if (activeTaskDetail) return;
@@ -3144,12 +3178,10 @@ export default function ChantierPage() {
   }, [activeTaskDetail, taskDetailOpenId]);
 
   useEffect(() => {
-    if (!taskDetailOpenId) {
-      setTaskDetailTab("synthese");
-      return;
-    }
     setTaskDetailTab("synthese");
-  }, [taskDetailOpenId]);
+    setTaskDetailTemplateId(activeTaskDetail?.task_template_id ?? "");
+    setTaskDetailTemplateError(null);
+  }, [taskDetailOpenId, activeTaskDetail?.id, activeTaskDetail?.task_template_id]);
 
   useEffect(() => {
     if (!activeTaskDetail) return;
@@ -3957,6 +3989,47 @@ export default function ChantierPage() {
       setToast({ type: "error", msg: e?.message ?? "Erreur ajout tâche." });
     } finally {
       setAddingTask(false);
+    }
+  }
+
+  /**
+   * Change only the library reference on a chantier task. Existing task title,
+   * hours, pointages, cost estimates, work progress and chantier preparation
+   * are deliberately preserved; linking a template must not re-import its
+   * quantities or overwrite work already performed.
+   */
+  async function saveTaskDetailLibraryLink(task: ChantierTaskRow) {
+    if (taskDetailTemplateSaving) return;
+    const selectedId = taskDetailTemplateId;
+    const selected = selectedId ? taskLibraryTemplateById.get(selectedId) : null;
+    if (selectedId && !selected) {
+      setTaskDetailTemplateError("Ce modèle n'est plus disponible dans la bibliothèque. Rechargez la liste avant de réessayer.");
+      return;
+    }
+    const nextLabel = selected?.titre ?? null;
+    setTaskDetailTemplateSaving(true);
+    setTaskDetailTemplateError(null);
+    try {
+      const updated = await updateTask(task.id, {
+        task_template_id: selectedId || null,
+        task_template_label: nextLabel,
+      });
+      setTasks((previous) => previous.map((item) => item.id === task.id ? { ...item, ...updated } : item));
+      await recordChantierActivity({
+        actionType: "updated",
+        entityType: "task",
+        entityId: task.id,
+        reason: "Référence bibliothèque modifiée",
+        changes: {
+          from_task_template_id: task.task_template_id,
+          task_template_id: selectedId || null,
+        },
+      });
+      setToast({ type: "ok", msg: selected ? "Tâche bibliothèque associée." : "Lien bibliothèque retiré." });
+    } catch (error) {
+      setTaskDetailTemplateError(error instanceof Error ? error.message : "Impossible de modifier le lien bibliothèque.");
+    } finally {
+      setTaskDetailTemplateSaving(false);
     }
   }
 
@@ -5163,9 +5236,6 @@ export default function ChantierPage() {
                       <h2 className="mt-2 text-2xl font-semibold text-slate-950">{detailTitle}</h2>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                          {detailTemplateLabel}
-                        </span>
-                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                           {detailLot}
                         </span>
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
@@ -5252,9 +5322,63 @@ export default function ChantierPage() {
                         1. Vue synthèse
                       </div>
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Tâche bibliothèque</div>
-                          <div className="mt-1 font-semibold text-slate-950">{detailTemplateLabel}</div>
+                        <div className="rounded-2xl bg-white p-4 sm:col-span-2">
+                          <label htmlFor="task-detail-library-template" className="text-xs font-semibold text-slate-600">
+                            Tâche liée à la bibliothèque
+                          </label>
+                          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <select
+                              id="task-detail-library-template"
+                              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900"
+                              value={taskDetailTemplateId}
+                              onChange={(event) => {
+                                setTaskDetailTemplateId(event.target.value);
+                                setTaskDetailTemplateError(null);
+                              }}
+                              disabled={taskDetailTemplateSaving}
+                            >
+                              <option value="">Aucune tâche bibliothèque</option>
+                              {activeTaskDetail.task_template_id &&
+                                !taskLibraryTemplateById.has(activeTaskDetail.task_template_id) && (
+                                  <option value={activeTaskDetail.task_template_id}>
+                                    Modèle précédent indisponible : {detailTemplateLabel}
+                                  </option>
+                                )}
+                              {taskLibraryTemplates.map((template) => (
+                                <option key={template.id} value={template.id}>
+                                  {template.titre}{template.lot ? ` · ${template.lot}` : ""}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={taskDetailTemplateSaving || taskDetailTemplateId === (activeTaskDetail.task_template_id ?? "")}
+                              onClick={() => void saveTaskDetailLibraryLink(activeTaskDetail)}
+                            >
+                              {taskDetailTemplateSaving ? "Enregistrement..." : "Enregistrer le lien"}
+                            </button>
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-3">
+                            {activeTaskDetail.task_template_id ? (
+                              <Link
+                                to={`/bibliotheque?templateId=${encodeURIComponent(activeTaskDetail.task_template_id)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm font-semibold text-blue-700 hover:underline"
+                              >
+                                Ouvrir et modifier la tâche bibliothèque
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-slate-500">Aucun modèle associé à cette tâche chantier.</span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            Le changement de modèle ne remplace pas le titre, les quantités, le temps passé ni l'avancement de cette tâche.
+                          </p>
+                          {taskDetailTemplateError && (
+                            <p role="alert" className="mt-2 text-sm text-red-700">{taskDetailTemplateError}</p>
+                          )}
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Lot</div>
@@ -5863,18 +5987,9 @@ export default function ChantierPage() {
       <div
         className={[
           "rounded-surface border border-subtle bg-surface p-4 shadow-sm",
-          detailSection === "execution" ? "pb-24" : "",
+          
         ].filter(Boolean).join(" ")}
       >
-        {detailSection === "execution" ? (
-          <button
-            type="button"
-            onClick={() => setTaskCreateDrawerOpen(true)}
-            className="fixed bottom-6 right-6 z-20 rounded-full bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700"
-          >
-            + {t("chantierPage.addTask")}
-          </button>
-        ) : null}
         {detailSection === "cockpit" && accueilPanel}
         {detailSection === "retours" && id && (
           <Suspense fallback={<div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Chargement des retours terrain du chantier...</div>}>
@@ -5911,14 +6026,6 @@ export default function ChantierPage() {
               description: consigne.description ?? null,
               zone_id: consigne.zone_id ?? null,
             }))}
-          />
-        )}
-        {detailSection === "execution" && id && (
-          <ChantierNotesSection
-            chantierId={id}
-            tasks={tasks}
-            zones={zones}
-            documents={documents}
           />
         )}
         {detailSection === "financier" && (
@@ -6521,172 +6628,62 @@ export default function ChantierPage() {
 
         {/* ---------------- ONGLET DEVIS & TACHES ---------------- */}
         {detailSection === "execution" && (
-          <ChantierTasksQuotesSection>
-          <div className="space-y-8">
-            {/* DEVIS */}
-            <section className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <div className="font-semibold">{t("chantierPage.quotesTitle")}</div>
-                  <div className="text-sm text-slate-500">{t("chantierPage.quotesSubtitle")}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-600">Production · tâches chantier</div>
+                  <h2 className="mt-1 text-xl font-bold text-slate-950">Suivre les travaux</h2>
+                  <p className="mt-1 max-w-2xl text-sm text-slate-600">
+                    Les tâches créées dans Préparer sont les mêmes qu'ici : on les retrouve pour
+                    affecter les équipes, enregistrer les heures, suivre l'avancement et les contrôler.
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-xs text-slate-500">{devisLoading ? t("common.states.loading") : `${devis.length} ${t("chantierPage.quotesCount")}`}</div>
-                  <button
-                    type="button"
-                    className="rounded-xl bg-[#2563EB] px-4 py-2 text-sm text-white hover:bg-[#1d4ed8]"
-                    onClick={() => setDevisImportDrawerOpen(true)}
-                  >
-                    {t("chantierPage.importQuotePdf")}
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setTaskCreateDrawerOpen(true)}
+                    className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+                    + Ajouter une tâche
                   </button>
+                  <a href="#chantier-devis" className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    Voir les devis
+                  </a>
                 </div>
               </div>
-
-              {devisError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {devisError}
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl bg-blue-50 p-3">
+                  <div className="text-xs font-medium text-blue-800">Tâches du chantier</div>
+                  <div className="mt-1 text-2xl font-bold text-blue-950">{tasksLoading ? "…" : tasks.length}</div>
                 </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-xs font-medium text-slate-600">En cours</div>
+                  <div className="mt-1 text-2xl font-bold text-slate-950">{tasksLoading ? "…" : tasks.filter((task) => task.status === "EN_COURS").length}</div>
+                </div>
+                <div className="rounded-xl bg-emerald-50 p-3">
+                  <div className="text-xs font-medium text-emerald-700">Terminées</div>
+                  <div className="mt-1 text-2xl font-bold text-emerald-950">{tasksLoading ? "…" : tasks.filter((task) => task.status === "FAIT").length}</div>
+                </div>
+              </div>
+              <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-700">Outils liés aux tâches</summary>
+                <nav aria-label="Outils complémentaires du chantier" className="mt-3 flex flex-wrap gap-2 text-sm">
+                  <Link to={`/chantiers/${id}/retours-terrain`} className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Retours terrain</Link>
+                  <Link to={`/chantiers/${id}/qualite`} className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Réserves et qualité</Link>
+                  <Link to="/bibliotheque?q=chantier%20production" className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Modèles actifs</Link>
+                  <Link to="/bibliotheque?readiness=missing_preparation" className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Préparations des modèles</Link>
+                  <Link to="/bibliotheque?readiness=chantier_hidden" className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Modèles à activer</Link>
+                  <Link to={`/chantiers/${id}/preparation`} className="rounded-lg border bg-white px-3 py-2 hover:bg-slate-100">Besoins matériels</Link>
+                </nav>
+              </details>
+              {tasks.length > 0 && filteredTasks.length === 0 && !tasksLoading && (
+                <button type="button" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                  onClick={() => { setFilterIntervenant("__ALL__"); setFilterTaskQuality("__ALL__"); }}>
+                  Les filtres masquent les {tasks.length} tâches. Afficher toutes les tâches
+                </button>
               )}
-
-              <div className="rounded-xl border bg-blue-50/50 p-4 text-sm text-slate-700">
-                {t("chantierPage.quoteHelpPrefix")} <span className="font-semibold">{t("chantierPage.importQuotePdf")}</span> {t("chantierPage.quoteHelpSuffix")}
-              </div>
-
-              <div className="space-y-3">
-                {devis.map((d: any) => {
-                  const isOpen = activeDevisId === d.id;
-                  return (
-                    <div key={d.id} className="rounded-xl border p-4 space-y-3">
-                      <div className="flex justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium truncate">{d.nom ?? t("chantierPage.quoteFallback")}</div>
-                          <div className="text-xs text-slate-500">ID : {d.id}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                            onClick={() => setActiveDevisId(isOpen ? null : d.id)}
-                          >
-                            {isOpen ? t("common.actions.close") : t("chantierPage.viewLines")}
-                          </button>
-                        </div>
-                      </div>
-
-                      {isOpen && (
-                        <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
-                          {lignesError && (
-                            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                              {lignesError}
-                            </div>
-                          )}
-
-                          {lignesLoading ? (
-                            <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
-                          ) : lignes.length === 0 ? (
-                            <div className="text-sm text-slate-500">{t("chantierPage.noLine")}</div>
-                          ) : (
-                            <div className="space-y-2">
-                              {lignes.map((l: any) => (
-                                <div key={l.id} className="flex justify-between items-start border-b py-2 text-sm gap-3">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="font-medium">{l.designation}</div>
-                                    {l.titre_tache ? (
-                                      <div className="mt-1 text-xs font-medium text-blue-700">Titre terrain: {l.titre_tache}</div>
-                                    ) : null}
-                                    <div className="text-xs text-slate-500">
-                                      {(l.corps_etat ?? "—")} {" • "}
-                                      {l.entreprise ?? "—"} {" • "}
-                                      {(l.quantite ?? "—")} {(l.unite ?? "")}
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => onDeleteLigne(l.id)}
-                                    className="text-red-600 text-xs hover:underline"
-                                  >
-                                    {t("common.actions.delete")}
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Ajouter une ligne */}
-                          <div className="pt-2">
-                            <div className="font-semibold text-sm">{t("chantierPage.addLine")}</div>
-                            <form onSubmit={onAddLigne} className="mt-2 grid gap-2">
-                              <div className="grid gap-2 md:grid-cols-2">
-                                <input
-                                  className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder={t("chantierPage.lotPlaceholder")}
-                                  value={lCorpsEtat}
-                                  onChange={(e) => setLCorpsEtat(e.target.value)}
-                                />
-                                <input
-                                  className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder={t("chantierPage.companyPlaceholder")}
-                                  value={lEntreprise}
-                                  onChange={(e) => setLEntreprise(e.target.value)}
-                                />
-                              </div>
-
-                              <input
-                                className="rounded-xl border px-3 py-2 text-sm"
-                                placeholder={t("chantierPage.designationPlaceholder")}
-                                value={lDesignation}
-                                onChange={(e) => setLDesignation(e.target.value)}
-                              />
-
-                              <div className="grid gap-2 md:grid-cols-3">
-                                <input
-                                  className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder={t("common.labels.unit")}
-                                  value={lUnite}
-                                  onChange={(e) => setLUnite(e.target.value)}
-                                />
-                                <input
-                                  className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder={t("common.labels.quantity")}
-                                  value={lQty}
-                                  onChange={(e) => setLQty(e.target.value)}
-                                />
-                                <label className="text-sm text-slate-700 flex items-center gap-2 justify-between">
-                                  <span className="flex items-center gap-2">
-                                    <input type="checkbox" checked={lGen} onChange={(e) => setLGen(e.target.checked)} />
-                                    {t("chantierPage.generateTask")}
-                                  </span>
-                                </label>
-                              </div>
-
-                              <div className="flex justify-end">
-                                <button
-                                  type="submit"
-                                  disabled={addingLigne}
-                                  className={[
-                                    "rounded-xl px-4 py-2 text-sm",
-                                    addingLigne ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
-                                  ].join(" ")}
-                                >
-                                  {addingLigne ? t("chantierPage.adding") : `+ ${t("chantierPage.addLine")}`}
-                                </button>
-                              </div>
-
-                              <div className="text-xs text-slate-500">
-                                {t("chantierPage.lineHelp")}
-                              </div>
-                            </form>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
             </section>
-
-            {/* TACHES */}
-            <section className="space-y-4">
+            <div className="flex flex-col gap-6">
+            {/* TACHES : même référentiel Supabase que la préparation, affiché en premier */}
+            <section id="chantier-taches" className="scroll-mt-28 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex justify-between">
                 <div>
                   <div className="font-semibold section-title">{t("chantierPage.tasks")}</div>
@@ -7074,6 +7071,11 @@ export default function ChantierPage() {
                 </div>
               )}
 
+              {!tasksLoading && !tasksError && tasks.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+                  Aucune tâche enregistrée sur ce chantier. Créez la première tâche ici ou importez un devis pour générer les travaux.
+                </div>
+              )}
               <div className="space-y-2">
                 {filteredTasks.map((t: any) => {
                   const isEditing = editingTaskId === t.id;
@@ -7104,14 +7106,7 @@ export default function ChantierPage() {
                   const taskZoneLabel = resolveTaskZoneSummary(t);
                   const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
                   const taskValidated = isTaskAdminValidated(t);
-                  const taskTemplateLabel = getTaskLibraryLabel(t);
                   const taskRepriseReason = String((t as any).reprise_reason ?? "").trim();
-                  const taskBudgetVente = toNumberOrNull((t as any).montant_total_devis_ht);
-                  const taskBudgetCout = toNumberOrNull((t as any).cout_estime_ht);
-                  const taskBudgetMarge =
-                    taskBudgetVente !== null && taskBudgetCout !== null
-                      ? Math.round((taskBudgetVente - taskBudgetCout) * 100) / 100
-                      : null;
 
                   return (
                     <div
@@ -7147,9 +7142,6 @@ export default function ChantierPage() {
                                 >
                                   {displayTitreClean}
                                 </button>
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-                                  {taskTemplateLabel}
-                                </span>
                               </div>
                               <div className="mt-3 grid gap-3 md:grid-cols-2">
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -7169,13 +7161,6 @@ export default function ChantierPage() {
                                   </div>
                                 </div>
                               </div>
-                              {taskBudgetMarge !== null ? (
-                                <div className="mt-2 text-xs">
-                                  <span className={["rounded-full border px-2 py-1", taskBudgetMarge < 0 ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"].join(" ")}>
-                                    {taskBudgetMarge < 0 ? "Budget en alerte" : "Budget OK"}
-                                  </span>
-                                </div>
-                              ) : null}
                               {taskRepriseReason && taskQuality === "a_reprendre" ? (
                                 <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                                   Reprise : {taskRepriseReason}
@@ -7593,8 +7578,179 @@ export default function ChantierPage() {
                 })}
               </div>
             </section>
+
+            {/* DEVIS */}
+            <section id="chantier-devis" className="scroll-mt-28 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold">{t("chantierPage.quotesTitle")}</div>
+                  <div className="text-sm text-slate-500">{t("chantierPage.quotesSubtitle")}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-slate-500">{devisLoading ? t("common.states.loading") : `${devis.length} ${t("chantierPage.quotesCount")}`}</div>
+                  <button
+                    type="button"
+                    className="rounded-xl bg-[#2563EB] px-4 py-2 text-sm text-white hover:bg-[#1d4ed8]"
+                    onClick={() => setDevisImportDrawerOpen(true)}
+                  >
+                    {t("chantierPage.importQuotePdf")}
+                  </button>
+                </div>
+              </div>
+
+              {devisError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {devisError}
+                </div>
+              )}
+
+              <div className="rounded-xl border bg-blue-50/50 p-4 text-sm text-slate-700">
+                {t("chantierPage.quoteHelpPrefix")} <span className="font-semibold">{t("chantierPage.importQuotePdf")}</span> {t("chantierPage.quoteHelpSuffix")}
+              </div>
+
+              <div className="space-y-3">
+                {devis.map((d: any) => {
+                  const isOpen = activeDevisId === d.id;
+                  return (
+                    <div key={d.id} className="rounded-xl border p-4 space-y-3">
+                      <div className="flex justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{d.nom ?? t("chantierPage.quoteFallback")}</div>
+                          <div className="text-xs text-slate-500">ID : {d.id}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                            onClick={() => setActiveDevisId(isOpen ? null : d.id)}
+                          >
+                            {isOpen ? t("common.actions.close") : t("chantierPage.viewLines")}
+                          </button>
+                        </div>
+                      </div>
+
+                      {isOpen && (
+                        <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
+                          {lignesError && (
+                            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                              {lignesError}
+                            </div>
+                          )}
+
+                          {lignesLoading ? (
+                            <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
+                          ) : lignes.length === 0 ? (
+                            <div className="text-sm text-slate-500">{t("chantierPage.noLine")}</div>
+                          ) : (
+                            <div className="space-y-2">
+                              {lignes.map((l: any) => (
+                                <div key={l.id} className="flex justify-between items-start border-b py-2 text-sm gap-3">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-medium">{l.designation}</div>
+                                    {l.titre_tache ? (
+                                      <div className="mt-1 text-xs font-medium text-blue-700">Titre terrain: {l.titre_tache}</div>
+                                    ) : null}
+                                    <div className="text-xs text-slate-500">
+                                      {(l.corps_etat ?? "—")} {" • "}
+                                      {l.entreprise ?? "—"} {" • "}
+                                      {(l.quantite ?? "—")} {(l.unite ?? "")}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => onDeleteLigne(l.id)}
+                                    className="text-red-600 text-xs hover:underline"
+                                  >
+                                    {t("common.actions.delete")}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Ajouter une ligne */}
+                          <div className="pt-2">
+                            <div className="font-semibold text-sm">{t("chantierPage.addLine")}</div>
+                            <form onSubmit={onAddLigne} className="mt-2 grid gap-2">
+                              <div className="grid gap-2 md:grid-cols-2">
+                                <input
+                                  className="rounded-xl border px-3 py-2 text-sm"
+                                  placeholder={t("chantierPage.lotPlaceholder")}
+                                  value={lCorpsEtat}
+                                  onChange={(e) => setLCorpsEtat(e.target.value)}
+                                />
+                                <input
+                                  className="rounded-xl border px-3 py-2 text-sm"
+                                  placeholder={t("chantierPage.companyPlaceholder")}
+                                  value={lEntreprise}
+                                  onChange={(e) => setLEntreprise(e.target.value)}
+                                />
+                              </div>
+
+                              <input
+                                className="rounded-xl border px-3 py-2 text-sm"
+                                placeholder={t("chantierPage.designationPlaceholder")}
+                                value={lDesignation}
+                                onChange={(e) => setLDesignation(e.target.value)}
+                              />
+
+                              <div className="grid gap-2 md:grid-cols-3">
+                                <input
+                                  className="rounded-xl border px-3 py-2 text-sm"
+                                  placeholder={t("common.labels.unit")}
+                                  value={lUnite}
+                                  onChange={(e) => setLUnite(e.target.value)}
+                                />
+                                <input
+                                  className="rounded-xl border px-3 py-2 text-sm"
+                                  placeholder={t("common.labels.quantity")}
+                                  value={lQty}
+                                  onChange={(e) => setLQty(e.target.value)}
+                                />
+                                <label className="text-sm text-slate-700 flex items-center gap-2 justify-between">
+                                  <span className="flex items-center gap-2">
+                                    <input type="checkbox" checked={lGen} onChange={(e) => setLGen(e.target.checked)} />
+                                    {t("chantierPage.generateTask")}
+                                  </span>
+                                </label>
+                              </div>
+
+                              <div className="flex justify-end">
+                                <button
+                                  type="submit"
+                                  disabled={addingLigne}
+                                  className={[
+                                    "rounded-xl px-4 py-2 text-sm",
+                                    addingLigne ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
+                                  ].join(" ")}
+                                >
+                                  {addingLigne ? t("chantierPage.adding") : `+ ${t("chantierPage.addLine")}`}
+                                </button>
+                              </div>
+
+                              <div className="text-xs text-slate-500">
+                                {t("chantierPage.lineHelp")}
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            </div>
           </div>
-          </ChantierTasksQuotesSection>
+        )}
+        {detailSection === "execution" && id && (
+          <ChantierNotesSection
+            chantierId={id}
+            tasks={tasks}
+            zones={zones}
+            documents={documents}
+          />
         )}
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
