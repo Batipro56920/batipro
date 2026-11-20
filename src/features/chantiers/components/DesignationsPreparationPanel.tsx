@@ -344,8 +344,8 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                     const actualHours = taskEntries.reduce((sum, row) => sum + Number(row.duration_hours ?? 0), 0);
                     const executedQuantity = taskEntries.reduce((sum, row) => sum + Number(row.quantite_realisee ?? 0), 0);
                     const materialRows = consumptions.filter((row) => row.chantier_task_id === task.id);
-                    const mainRatios = (task.task_template_id && preparation
-                      ? preparation.materialsByTemplateId[task.task_template_id] ?? [] : []).filter((ratio) => ratio.is_main_material);
+                    const trackedRatios = task.task_template_id && preparation
+                      ? preparation.materialsByTemplateId[task.task_template_id] ?? [] : [];
                     const draft = getDraft(task.id);
                     return <section key={task.id} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -455,8 +455,8 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                               </p>
                             </div>
                             <div className="rounded-lg bg-white p-3">
-                              <div className="font-semibold">Matériaux principaux réellement consommés</div>
-                              {mainRatios.map((ratio) => {
+                              <div className="font-semibold">Matériaux et consommables utilisés</div>
+                              {trackedRatios.map((ratio) => {
                                 const used = materialRows.filter((row) => row.material_ratio_id === ratio.id)
                                   .reduce((sum, row) => sum + row.quantite_consommee, 0);
                                 const planned = estimate?.materials.find((row) => row.id === ratio.id)?.estimated_quantity;
@@ -465,7 +465,7 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                                   {executedQuantity > 0 && <span> · {(used / executedQuantity).toLocaleString("fr-FR", { maximumFractionDigits: 3 })} par unité réalisée</span>}
                                 </p>;
                               })}
-                              {!mainRatios.length && <p className="mt-1 text-xs text-slate-500">Aucun matériau principal suivi dans le modèle.</p>}
+                              {!trackedRatios.length && <p className="mt-1 text-xs text-slate-500">Aucune ressource à consommation renseignée dans le modèle.</p>}
                               <p className="mt-2 text-xs text-slate-500">Les achats et les commandes ne sont pas comptés comme consommations.</p>
                             </div>
                           </div>
@@ -497,8 +497,8 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                                 className="rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white disabled:opacity-50">Enregistrer</button>
                             </div>
                           </form>
-                          {mainRatios.length > 0 && (
-                            <form onSubmit={(event) => { event.preventDefault(); void saveActualMaterial(task, mainRatios.map((ratio) => ratio.id)); }}
+                          {trackedRatios.length > 0 && (
+                            <form onSubmit={(event) => { event.preventDefault(); void saveActualMaterial(task, trackedRatios.map((ratio) => ratio.id)); }}
                               className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
                               <div className="font-semibold">Enregistrer une consommation réelle</div>
                               <div className="flex flex-wrap items-end gap-2">
@@ -506,7 +506,7 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                                   <select required value={draft.materialId} onChange={(event) => patchDraft(task.id, { materialId: event.target.value })}
                                     className="mt-1 block rounded-lg border px-2 py-2 text-sm">
                                     <option value="">Choisir</option>
-                                    {mainRatios.map((ratio) => <option key={ratio.id} value={ratio.id}>{ratio.material_name} ({ratio.ratio_unit})</option>)}
+                                    {trackedRatios.map((ratio) => <option key={ratio.id} value={ratio.id}>{ratio.material_name} ({ratio.ratio_unit})</option>)}
                                   </select>
                                 </label>
                                 <label className="text-xs text-slate-600">Quantité consommée
