@@ -190,12 +190,10 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
   const paidTtc = billings.reduce((sum, row) => sum + Number(row.paid_amount_ttc ?? 0), 0);
   const signedQuoteHt = Number(chantier?.signed_quote_amount_ht ?? dashboard?.chiffreAffairesBaseHt ?? 0);
   const realCostHt = Number(dashboard?.coutReelHt ?? 0) + extraExpensesHt;
-  const forecastCostHt =
-    Number(chantier?.budget_labor_planned_ht ?? 0) +
-    Number(chantier?.budget_materials_planned_ht ?? 0) +
-    Number(chantier?.budget_subcontracting_planned_ht ?? 0);
   const expectedRevenueHt = signedQuoteHt + Number(dashboard?.avenantsValidesHt ?? 0);
-  const forecastMarginHt = expectedRevenueHt - (forecastCostHt || Number(dashboard?.coutPrevuHt ?? 0));
+  const forecastMarginHt = dashboard?.coutTechniquePrevuHt !== null &&
+    dashboard?.coutTechniquePrevuHt !== undefined && dashboard?.previsionTechniqueComplete
+      ? expectedRevenueHt - dashboard.coutTechniquePrevuHt : null;
   const realMarginHt = expectedRevenueHt - realCostHt;
   const remainingToInvoice = Math.max(0, Number(chantier?.signed_quote_amount_ttc ?? expectedRevenueHt) - billedTtc);
   const remainingToCollect = Math.max(0, billedTtc - paidTtc);
@@ -240,7 +238,7 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         {[
           ["Devis signé", formatMoney(signedQuoteHt), "Montant CRM / devis d'origine"],
           ["Coût réel", formatMoney(realCostHt), `Dont dépenses directes ${formatMoney(extraExpensesHt)}`],
-          ["Marge prévisionnelle", formatMoney(forecastMarginHt), `${formatPercent((forecastMarginHt / Math.max(1, expectedRevenueHt)) * 100)}`],
+          ["Marge prévisionnelle", forecastMarginHt === null ? "Non chiffrée" : formatMoney(forecastMarginHt), forecastMarginHt === null ? "Tâches techniques à compléter" : formatPercent((forecastMarginHt / Math.max(1, expectedRevenueHt)) * 100)],
           ["Marge réelle", formatMoney(realMarginHt), `${formatPercent((realMarginHt / Math.max(1, expectedRevenueHt)) * 100)}`],
           ["Facturé", formatMoney(billedTtc), "TTC client"],
           ["Encaissé", formatMoney(paidTtc), "TTC reçu"],
@@ -269,15 +267,17 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Couts prevus HT</div>
           <div className="mt-1.5 text-base font-semibold text-slate-950">
-            {formatMoney(dashboard?.coutPrevuHt ?? 0)}
+            {dashboard?.coutTechniquePrevuHt == null ? "Non chiffré" : formatMoney(dashboard.coutTechniquePrevuHt)}
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            MO {formatMoney(dashboard?.coutMoPrevuHt ?? 0)} · achats {formatMoney(dashboard?.achatsPrevusHt ?? 0)}
+            {dashboard?.previsionTechniqueComplete
+              ? `Main-d'œuvre ${formatMoney(dashboard.coutMoPrevuHt)} · autres ressources ${formatMoney(dashboard.achatsPrevusHt)}`
+              : `${dashboard?.previsionTechniqueManquants.length ?? 0} tâche(s) ou ressource(s) à chiffrer`}
           </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Couts reels HT</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Coûts réels directs HT</div>
           <div className="mt-1.5 text-base font-semibold text-slate-950">
             {formatMoney(dashboard?.coutReelHt ?? 0)}
           </div>
@@ -369,25 +369,14 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
             </div>
           </form>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Alertes budget</div>
-            <div className="mt-4 space-y-2">
-              {(dashboard?.alertes ?? []).length === 0 ? (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                  Aucun depassement detecte.
-                </div>
-              ) : (
-                dashboard?.alertes.map((message) => (
-                  <div
-                    key={message}
-                    className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-                  >
-                    {message}
-                  </div>
-                ))
-              )}
+          {dashboard?.previsionTechniqueManquants.length ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="font-semibold text-slate-800">Chiffrage technique incomplet</h3>
+              <div className="mt-2 space-y-1 text-sm text-slate-600">
+                {dashboard.previsionTechniqueManquants.map((message, index) => <p key={index}>{message}</p>)}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
