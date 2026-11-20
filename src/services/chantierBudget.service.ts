@@ -67,6 +67,7 @@ export type ChantierBudgetDashboard = {
   achatsSaisisHt: number;
   /** Coût matières venant des mouvements de stock rattachés au chantier. */
   achatsLivresHt: number;
+  achatsRapprochementRequis: boolean;
   coutPrevuHt: number;
   /** Null until all technical tasks are linked to priced templates. */
   coutTechniquePrevuHt: number | null;
@@ -474,11 +475,16 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   // Les bons de livraison lus sur le terrain s'ajoutent aux achats saisis au
   // bureau : ce sont deux sources distinctes du meme cout matieres.
   const achatsLivresHt = normalizeNumber(materialCostHt);
+  // Manual purchase request costs and the stock/delivery ledger may reflect
+  // the same invoice. They have no shared document id in this schema.
+  // Keep their separate totals but do not certify a combined real margin.
+  const achatsRapprochementRequis = achatsSaisisHt > 0 && achatsLivresHt > 0;
   const achatsReelsHt = achatsSaisisHt + achatsLivresHt;
   const coutPrevuHt = coutMoPrevuHt + achatsPrevusHt;
   const coutTechniquePrevuHt = previsionTechniqueComplete ? coutPrevuHt : null;
   const coutReelHt = coutMoReelHt + achatsReelsHt;
-  const coutReelCompletHt = coutMoReelCompletHt === null ? null : coutMoReelCompletHt + achatsReelsHt;
+  const coutReelCompletHt = coutMoReelCompletHt === null || achatsRapprochementRequis
+    ? null : coutMoReelCompletHt + achatsReelsHt;
   const margePrevueHt = chiffreAffairesPrevuHt - coutPrevuHt;
   const margeReelleHt = chiffreAffairesPrevuHt - coutReelHt;
   const margePrevuePct = safePct(margePrevueHt, chiffreAffairesPrevuHt);
@@ -511,6 +517,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     achatsReelsHt,
     achatsSaisisHt,
     achatsLivresHt,
+    achatsRapprochementRequis,
     coutPrevuHt,
     coutTechniquePrevuHt,
     previsionTechniqueComplete,
