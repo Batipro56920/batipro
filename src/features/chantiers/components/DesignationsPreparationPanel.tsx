@@ -43,15 +43,15 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
         const [allLines, allTemplates, companyRates] = await Promise.all([
           Promise.all(devis.map((row) => listDevisLignes(row.id))).then((groups) => groups.flat()),
           listTaskTemplates(),
-          getCompanyHourlyRates(),
+          getCompanyHourlyRates().catch(() => null),
         ]);
         const bundle = await listTaskTemplatePreparationByTemplateIds(allTemplates.map((row) => row.id));
         if (!active) return;
-        if (!bundle.schemaReady) throw new Error("Les ratios de la bibliothèque ne sont pas disponibles.");
         setLines(allLines);
         setTemplates(allTemplates);
         setRates(companyRates);
-        setPreparation(bundle);
+        setPreparation(bundle.schemaReady ? bundle : null);
+        if (!bundle.schemaReady) setError("Ratios techniques indisponibles : désignations visibles, coûts non calculés.");
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "Impossible de charger les désignations.");
       } finally {
