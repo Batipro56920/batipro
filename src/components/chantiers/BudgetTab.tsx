@@ -292,6 +292,9 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
               : <div className="text-amber-700">Coût complet indisponible : vérifier les charges de l'entreprise.</div>}
             <p className="mt-1 text-[11px] text-slate-500">Le total et la marge réelle ci-dessus restent calculés sur les coûts directs ; les frais indirects sont présentés séparément pour éviter leur double comptage.</p>
           </div>
+          {dashboard?.achatsRapprochementRequis ? (
+            <p className="mt-2 text-xs text-slate-600">Achats saisis et mouvements de stock présents : rapprocher les justificatifs avant de calculer une marge réelle, pour éviter les doublons.</p>
+          ) : null}
           {extraExpensesHt > 0 && <p className="mt-2 text-xs text-slate-500">Autres dépenses manuelles : {formatMoney(extraExpensesHt)} HT, à rapprocher des achats pour éviter un double comptage.</p>}
           {dashboard?.achatsLivresHt ? (
             <div className="mt-0.5 text-[11px] text-slate-500">
