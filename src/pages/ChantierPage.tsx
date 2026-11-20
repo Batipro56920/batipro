@@ -3375,94 +3375,6 @@ export default function ChantierPage() {
   }, [tasks]);
 
   const tempsPrevues = Number((item as any)?.heures_prevues ?? 0) || 0;
-  const reservesOuvertes = useMemo(() => {
-    return reserves.filter((r) => (r.status ?? "") !== "LEVEE").length;
-  }, [reserves]);
-  const overdueTasks = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return tasks.filter((task) => {
-      if (!task.date_fin) return false;
-      if (task.status === "FAIT") return false;
-      const timestamp = Date.parse(`${task.date_fin}T00:00:00`);
-      return Number.isFinite(timestamp) && timestamp < today.getTime();
-    });
-  }, [tasks]);
-  const blockedLots = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const byLot = new Map<string, { hasProgress: boolean; hasPastCommitment: boolean }>();
-    tasks.forEach((task) => {
-      const lot = resolveTaskLotName(task);
-      const current = byLot.get(lot) ?? { hasProgress: false, hasPastCommitment: false };
-      if (task.status === "EN_COURS" || task.status === "FAIT" || Number(task.temps_reel_h ?? 0) > 0) {
-        current.hasProgress = true;
-      }
-      const anchor = task.date_fin ?? task.date_debut ?? task.date;
-      if (anchor) {
-        const timestamp = Date.parse(`${anchor}T00:00:00`);
-        if (Number.isFinite(timestamp) && timestamp < today.getTime()) {
-          current.hasPastCommitment = true;
-        }
-      }
-      byLot.set(lot, current);
-    });
-    return [...byLot.entries()]
-      .filter(([, state]) => state.hasPastCommitment && !state.hasProgress)
-      .map(([lot]) => lot);
-  }, [tasks]);
-  const heuresDepassees = useMemo(() => {
-    if (tempsPrevues <= 0) return 0;
-    return Math.max(0, totalTempsReel - tempsPrevues);
-  }, [tempsPrevues, totalTempsReel]);
-  const missingRecentTime = useMemo(() => {
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const latestRelevantUpdate = tasks.reduce((latest, task) => {
-      if (Number(task.temps_reel_h ?? 0) <= 0) return latest;
-      const timestamp = Date.parse(task.updated_at ?? task.created_at ?? "");
-      return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
-    }, 0);
-    if (totalTempsReel <= 0) return true;
-    if (latestRelevantUpdate <= 0) return true;
-    return latestRelevantUpdate < cutoff;
-  }, [tasks, totalTempsReel]);
-  const alertCards = useMemo(() => {
-    const rows: Array<{ key: string; title: string; detail: string; tone: "warning" | "danger" | "ok" }> = [];
-    if (overdueTasks.length > 0) {
-      rows.push({
-        key: "retard",
-        title: "Tâches en retard",
-        detail: `${overdueTasks.length} tâche${overdueTasks.length > 1 ? "s" : ""} à relancer`,
-        tone: overdueTasks.length > 3 ? "danger" : "warning",
-      });
-    }
-    if (blockedLots.length > 0) {
-      rows.push({
-        key: "lots",
-        title: "Lots bloqués",
-        detail: blockedLots.slice(0, 2).join(" • "),
-        tone: "warning",
-      });
-    }
-    if (heuresDepassees > 0) {
-      rows.push({
-        key: "budget",
-        title: "Dépassement budget",
-        detail: `${heuresDepassees.toFixed(1)} h au-dessus du prévu`,
-        tone: "danger",
-      });
-    }
-    if (missingRecentTime) {
-      rows.push({
-        key: "temps",
-        title: "Absence de saisie récente",
-        detail: "Aucune saisie temps récente sur le chantier",
-        tone: "warning",
-      });
-    }
-    return rows;
-  }, [blockedLots, heuresDepassees, missingRecentTime, overdueTasks.length]);
-
   /* ---------------- actions ---------------- */
 
   // ----- tâches -----
@@ -4843,7 +4755,7 @@ export default function ChantierPage() {
           ]
         : activeWorkspace === "qualite"
           ? [
-              { key: "reserves", label: "Réserves", href: `/chantiers/${id}/qualite`, enabled: isSectionEnabled("qualite"), active: detailSection === "qualite" || detailSection === "reserves", badge: reservesOuvertes > 0 ? String(reservesOuvertes) : null, priority: reservesOuvertes > 0 },
+              { key: "reserves", label: "Réserves", href: `/chantiers/${id}/qualite`, enabled: isSectionEnabled("qualite"), active: detailSection === "qualite" || detailSection === "reserves" },
               { key: "visites", label: "Visites", href: `/chantiers/${id}/visites`, enabled: isSectionEnabled("visites"), active: detailSection === "visites" },
               { key: "reception", label: "Réception", href: `/chantiers/${id}/reception`, enabled: isSectionEnabled("reception"), active: detailSection === "reception" },
               { key: "sav", label: "SAV", href: `/chantiers/${id}/sav`, enabled: isSectionEnabled("sav"), active: detailSection === "sav" },
@@ -4907,48 +4819,6 @@ export default function ChantierPage() {
     <div className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.5fr)]">
         <div className="space-y-4">
-          <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="bt-section-title text-ink">À traiter maintenant</div>
-                <div className="bt-secondary mt-1 text-muted">Les actions qui demandent une décision sur ce chantier.</div>
-              </div>
-              <span className="rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger-on">
-                {alertCards.length + (reservesOuvertes > 0 ? 1 : 0)} action{alertCards.length + (reservesOuvertes > 0 ? 1 : 0) > 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="mt-3 divide-y divide-subtle">
-              {reservesOuvertes > 0 ? (
-                <Link to={`/chantiers/${id}/qualite`} className="flex items-center justify-between gap-3 py-3 hover:text-primary-on">
-                  <div>
-                    <div className="text-sm font-semibold text-ink">Réserves à lever</div>
-                    <div className="bt-secondary mt-0.5 text-muted">{reservesOuvertes} réserve{reservesOuvertes > 1 ? "s" : ""} encore ouverte{reservesOuvertes > 1 ? "s" : ""}</div>
-                  </div>
-                  <span className="text-sm font-semibold text-primary-on">Traiter →</span>
-                </Link>
-              ) : null}
-              {alertCards.map((alert) => {
-                const href = alert.key === "temps"
-                  ? `/chantiers/${id}/temps`
-                  : alert.key === "budget"
-                    ? `/chantiers/${id}/financier`
-                    : `/chantiers/${id}/execution`;
-                return (
-                  <Link key={alert.key} to={href} className="flex items-center justify-between gap-3 py-3 hover:text-primary-on">
-                    <div>
-                      <div className="text-sm font-semibold text-ink">{alert.title}</div>
-                      <div className="bt-secondary mt-0.5 text-muted">{alert.detail}</div>
-                    </div>
-                    <span className="text-sm font-semibold text-primary-on">Ouvrir →</span>
-                  </Link>
-                );
-              })}
-              {alertCards.length === 0 && reservesOuvertes === 0 ? (
-                <div className="py-4 text-sm font-medium text-success-on">Aucune action urgente sur ce chantier.</div>
-              ) : null}
-            </div>
-          </section>
-
           <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -5854,9 +5724,6 @@ export default function ChantierPage() {
                   <span>{item.adresse || "Adresse non renseignée"}</span>
                   <span>Fin {item.date_fin_prevue ?? item.planning_end_date ?? "-"}</span>
                   <span className="font-semibold text-ink-secondary">{avancement}%</span>
-                  <span className={alertCards.length ? "font-semibold text-danger-on" : "font-semibold text-success-on"}>
-                    {alertCards.length ? `${alertCards.length} alerte(s)` : "Aucune alerte critique"}
-                  </span>
                 </div>
               </div>
             </div>
