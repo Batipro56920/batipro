@@ -5575,7 +5575,7 @@ export default function ChantierPage() {
             <TerrainFeedbacksPage chantierId={id} embedded />
           </Suspense>
         )}
-        {detailSection === "preparation" && id && <ChantierPreparationSection chantierId={id} onTaskOpen={(taskId) => { setTaskDetailOpenId(taskId); setTaskDetailTab("synthese"); }} />}
+        {detailSection === "preparation" && id && <ChantierPreparationSection chantierId={id} onTaskOpen={async (taskId) => { await refreshTasksOnly(); setTaskDetailOpenId(taskId); setTaskDetailTab("synthese"); }} />}
         {detailSection === "preparation" && id && (
           <ChantierLocationSection
             chantierId={id}
