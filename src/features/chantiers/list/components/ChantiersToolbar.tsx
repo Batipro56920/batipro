@@ -18,10 +18,7 @@ const PERIODS: Array<{ key: ChantierListFilters["period"]; label: string }> = [
   { key: "all", label: "Toute période" },
   { key: "this_month", label: "Ce mois" },
   { key: "next_30", label: "30 prochains jours" },
-  { key: "late", label: "En retard" },
-  { key: "alerts", label: "Alertes à traiter" },
   { key: "terrain_feedback", label: "Retours terrain ouverts" },
-  { key: "terrain_feedback_priority", label: "Retours terrain urgents" },
 ];
 
 const FIELD_CLASS =
