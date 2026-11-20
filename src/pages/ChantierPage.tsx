@@ -4279,7 +4279,7 @@ export default function ChantierPage() {
     }
     setToast({
       type: "ok",
-      msg: `Import termine: ${result.linesInserted} ligne(s), ${result.tasksCreated} tache(s), mode ${result.mode}.`,
+      msg: `Devis importé : ${result.linesInserted} désignation(s). Associez les tâches techniques dans Préparer.`,
     });
   }
 
