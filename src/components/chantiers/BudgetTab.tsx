@@ -189,12 +189,12 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
   const billedTtc = billings.reduce((sum, row) => sum + Number(row.amount_ttc ?? 0), 0);
   const paidTtc = billings.reduce((sum, row) => sum + Number(row.paid_amount_ttc ?? 0), 0);
   const signedQuoteHt = Number(chantier?.signed_quote_amount_ht ?? dashboard?.chiffreAffairesBaseHt ?? 0);
-  const realCostHt = Number(dashboard?.coutReelHt ?? 0) + extraExpensesHt;
+  const realCostHt = dashboard?.coutReelCompletHt ?? null;
   const expectedRevenueHt = signedQuoteHt + Number(dashboard?.avenantsValidesHt ?? 0);
   const forecastMarginHt = dashboard?.coutTechniquePrevuHt !== null &&
     dashboard?.coutTechniquePrevuHt !== undefined && dashboard?.previsionTechniqueComplete
       ? expectedRevenueHt - dashboard.coutTechniquePrevuHt : null;
-  const realMarginHt = expectedRevenueHt - realCostHt;
+  const realMarginHt = realCostHt === null ? null : expectedRevenueHt - realCostHt;
   const remainingToInvoice = Math.max(0, Number(chantier?.signed_quote_amount_ttc ?? expectedRevenueHt) - billedTtc);
   const remainingToCollect = Math.max(0, billedTtc - paidTtc);
 
@@ -237,9 +237,9 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
         {[
           ["Devis signé", formatMoney(signedQuoteHt), "Montant CRM / devis d'origine"],
-          ["Coût réel", formatMoney(realCostHt), `Dont dépenses directes ${formatMoney(extraExpensesHt)}`],
+          ["Coûts suivis à date", realCostHt === null ? "Non chiffrés" : formatMoney(realCostHt), "Pointages et achats suivis, frais indirects si disponibles"],
           ["Marge prévisionnelle", forecastMarginHt === null ? "Non chiffrée" : formatMoney(forecastMarginHt), forecastMarginHt === null ? "Tâches techniques à compléter" : formatPercent((forecastMarginHt / Math.max(1, expectedRevenueHt)) * 100)],
-          ["Marge réelle", formatMoney(realMarginHt), `${formatPercent((realMarginHt / Math.max(1, expectedRevenueHt)) * 100)}`],
+          ["Marge à date indicative", realMarginHt === null ? "Non chiffrée" : formatMoney(realMarginHt), realMarginHt === null ? "Coût complet indisponible" : formatPercent((realMarginHt / Math.max(1, expectedRevenueHt)) * 100)],
           ["Facturé", formatMoney(billedTtc), "TTC client"],
           ["Encaissé", formatMoney(paidTtc), "TTC reçu"],
           ["Reste à encaisser", formatMoney(remainingToCollect), `Reste à facturer ${formatMoney(remainingToInvoice)}`],
@@ -277,12 +277,12 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Coûts réels directs HT</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Coûts suivis HT (à date)</div>
           <div className="mt-1.5 text-base font-semibold text-slate-950">
-            {formatMoney(dashboard?.coutReelHt ?? 0)}
+            {realCostHt === null ? "Non chiffrés" : formatMoney(realCostHt)}
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            MO {formatMoney(dashboard?.coutMoReelHt ?? 0)} · achats {formatMoney(dashboard?.achatsReelsHt ?? 0)}
+            MO directe {formatMoney(dashboard?.coutMoReelHt ?? 0)} · achats suivis {formatMoney(dashboard?.achatsReelsHt ?? 0)}
           </div>
           <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-600">
             <div className="font-semibold text-slate-800">Main-d'œuvre : coût direct / coût complet</div>
@@ -292,6 +292,7 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
               : <div className="text-amber-700">Coût complet indisponible : vérifier les charges de l'entreprise.</div>}
             <p className="mt-1 text-[11px] text-slate-500">Le total et la marge réelle ci-dessus restent calculés sur les coûts directs ; les frais indirects sont présentés séparément pour éviter leur double comptage.</p>
           </div>
+          {extraExpensesHt > 0 && <p className="mt-2 text-xs text-slate-500">Autres dépenses manuelles : {formatMoney(extraExpensesHt)} HT, à rapprocher des achats pour éviter un double comptage.</p>}
           {dashboard?.achatsLivresHt ? (
             <div className="mt-0.5 text-[11px] text-slate-500">
               dont {formatMoney(dashboard.achatsLivresHt)} de matériaux (stock et livraisons)
@@ -300,20 +301,20 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Marge reelle</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Marge à date (indicative)</div>
           <div
             className={[
               "mt-1.5 text-base font-semibold",
               marginToneClass(
-                dashboard?.margeReellePct ?? 0,
+                realMarginHt === null ? 0 : (realMarginHt / Math.max(1, expectedRevenueHt)) * 100,
                 dashboard?.settings.objectif_marge_pct ?? 25,
               ),
             ].join(" ")}
           >
-            {formatMoney(dashboard?.margeReelleHt ?? 0)}
+            {realMarginHt === null ? "Non chiffrée" : formatMoney(realMarginHt)}
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            {formatPercent(dashboard?.margeReellePct ?? 0)} · objectif{" "}
+            {realMarginHt === null ? "Coût complet indisponible" : formatPercent((realMarginHt / Math.max(1, expectedRevenueHt)) * 100)} · objectif{" "}
             {formatPercent(dashboard?.settings.objectif_marge_pct ?? 25)}
           </div>
         </div>
