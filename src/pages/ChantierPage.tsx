@@ -5382,11 +5382,11 @@ export default function ChantierPage() {
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Quantité</div>
-                          {taskDetailEditing ? <div className="mt-2 flex gap-2"><input aria-label="Quantité" inputMode="decimal" className="w-24 rounded-lg border px-2 py-1.5" value={editQuantite} onChange={(e) => setEditQuantite(e.target.value)} /><input aria-label="Unité" className="w-24 rounded-lg border px-2 py-1.5" value={editUnite} onChange={(e) => setEditUnite(e.target.value)} /></div> : <div className="mt-1 font-semibold text-slate-950">{activeTaskDetail.quantite ?? "—"} {activeTaskDetail.unite ?? ""}</div>
+                          {taskDetailEditing ? <div className="mt-2 flex gap-2"><input aria-label="Quantité" inputMode="decimal" className="w-24 rounded-lg border px-2 py-1.5" value={editQuantite} onChange={(e) => setEditQuantite(e.target.value)} /><input aria-label="Unité" className="w-24 rounded-lg border px-2 py-1.5" value={editUnite} onChange={(e) => setEditUnite(e.target.value)} /></div> : <div className="mt-1 font-semibold text-slate-950">{activeTaskDetail.quantite ?? "—"} {activeTaskDetail.unite ?? ""}</div>}
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Temps prévu / passé</div>
-                          {taskDetailEditing ? <input aria-label="Temps prévu en heures" inputMode="decimal" className="mt-2 w-full rounded-lg border px-2 py-1.5" value={editTempsPrevuH} onChange={(e) => setEditTempsPrevuH(e.target.value)} /> : <div className="mt-1 font-semibold text-slate-950">{Math.round(Number(activeTaskDetail.temps_prevu_h ?? 0) * 100) / 100} h prévues · {Math.round(Number(activeTaskDetail.temps_reel_h ?? 0) * 100) / 100} h réalisées</div>
+                          {taskDetailEditing ? <input aria-label="Temps prévu en heures" inputMode="decimal" className="mt-2 w-full rounded-lg border px-2 py-1.5" value={editTempsPrevuH} onChange={(e) => setEditTempsPrevuH(e.target.value)} /> : <div className="mt-1 font-semibold text-slate-950">{Math.round(Number(activeTaskDetail.temps_prevu_h ?? 0) * 100) / 100} h prévues · {Math.round(Number(activeTaskDetail.temps_reel_h ?? 0) * 100) / 100} h réalisées</div>}
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Avancement</div>
