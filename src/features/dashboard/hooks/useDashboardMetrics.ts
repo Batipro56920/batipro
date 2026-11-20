@@ -485,14 +485,6 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, chant
 
     return [
       {
-        key: "alertes",
-        label: "Alertes chantier",
-        value: String(alerts.length),
-        hint: alerts.length > 0 ? "Réserves, tâches, achats, préparation" : "Aucune alerte active",
-        tone: alerts.length > 0 ? (criticalItems.length > 0 ? "danger" : "warning") : "success",
-        target: { kind: "filter", filter: "alertes" },
-      },
-      {
         key: "chantiers",
         label: "Chantiers actifs",
         value: String(count),
@@ -504,8 +496,8 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, chant
         key: "avancement",
         label: "Avancement moyen",
         value: formatPercent(avgProgress),
-        hint: count === 0 ? "Aucun chantier actif" : "Chantiers à faible progression",
-        tone: count === 0 ? "warning" : avgProgress < 35 ? "danger" : avgProgress < 65 ? "warning" : "success",
+        hint: count === 0 ? "Aucun chantier actif" : "Avancement moyen des chantiers",
+        tone: "info",
         target: { kind: "tri", view: "avancement" },
       },
       {
@@ -516,16 +508,11 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, chant
             ? `${formatHours(spentHours, locale)} / ${formatHours(plannedHours, locale)}`
             : formatHours(spentHours, locale),
         hint: plannedHours > 0 ? `${formatHours(plannedHours, locale)} prévues` : "Prévision non renseignée",
-        tone:
-          plannedHours > 0 && spentHours > plannedHours
-            ? "danger"
-            : plannedHours > 0 && spentHours > plannedHours * 0.85
-              ? "warning"
-              : "info",
+        tone: "info",
         target: { kind: "tri", view: "heures" },
       },
     ];
-  }, [alerts.length, chantiers, criticalItems.length, locale]);
+  }, [chantiers, locale]);
 
   const businessMetrics = useMemo<DashboardBusinessMetric[]>(() => [
     { key: "invoices", label: "Factures à encaisser", value: "—", hint: "Factures émises non soldées", href: "/factures?status=a_encaisser", tone: "warning", actionable: true },
