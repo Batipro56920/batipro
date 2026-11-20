@@ -119,6 +119,7 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
         const bundle = await listTaskTemplatePreparationByTemplateIds(allTemplates.map((row) => row.id));
         if (!active) return;
         setLines(allLines);
+        setExpandedIds((existing) => existing.length > 0 ? existing : allLines.length > 0 ? [allLines[0].id] : []);
         setTemplates(allTemplates);
         setRates(companyRates);
         setPreparation(bundle.schemaReady ? bundle : null);
