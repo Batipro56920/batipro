@@ -11,7 +11,7 @@ type Metrics = {
   terrainFeedbackPriority: number;
 };
 
-export type ChantiersMeasureKey = "active" | "preparation" | "late" | "alerts" | "terrainFeedback";
+export type ChantiersMeasureKey = "active" | "preparation" | "terrainFeedback";
 
 type Measure = {
   key: string;
@@ -22,25 +22,14 @@ type Measure = {
   actionLabel?: string;
 };
 
-function terrainFeedbackAlertHint(metrics: Metrics) {
-  if (metrics.terrainFeedbackPriority > 0) return "Retards, temps et retours urgents";
-  if (metrics.terrainFeedbackOpen > 0) return "Retards, temps ou retours ouverts";
-  return "Retards, temps ou retours terrain";
-}
-
 function terrainFeedbackValue(metrics: Metrics) {
-  if (metrics.terrainFeedbackPriority > 0) return metrics.terrainFeedbackPriority;
   return metrics.terrainFeedbackOpen;
 }
 
 function terrainFeedbackHint(metrics: Metrics) {
-  if (metrics.terrainFeedbackPriority > 0) {
-    return `${metrics.terrainFeedbackPriority} urgent${metrics.terrainFeedbackPriority > 1 ? "s" : ""} / ${metrics.terrainFeedbackOpen} ouvert${metrics.terrainFeedbackOpen > 1 ? "s" : ""}`;
-  }
-  if (metrics.terrainFeedbackOpen > 0) {
-    return `${metrics.terrainFeedbackOpen} retour${metrics.terrainFeedbackOpen > 1 ? "s" : ""} terrain ouvert${metrics.terrainFeedbackOpen > 1 ? "s" : ""}`;
-  }
-  return "Aucun retour terrain ouvert";
+  return metrics.terrainFeedbackOpen > 0
+    ? `${metrics.terrainFeedbackOpen} retour(s) terrain`
+    : "Aucun retour terrain";
 }
 
 /**
@@ -61,8 +50,6 @@ export function ChantiersMeasuresBand({
 }) {
   const measures: Measure[] = [
     { key: "active", selectKey: "active", label: "Chantiers actifs", value: metrics.active, hint: "Préparation, en cours, pause", actionLabel: "Afficher les chantiers actifs" },
-    { key: "late", selectKey: "late", label: "En retard", value: metrics.late, hint: "Échéance dépassée", actionLabel: "Voir les chantiers en retard" },
-    { key: "alerts", selectKey: "alerts", label: "Alertes", value: metrics.alerts, hint: terrainFeedbackAlertHint(metrics), actionLabel: "Voir les alertes à traiter" },
     { key: "terrainFeedback", selectKey: "terrainFeedback", label: "Retours terrain", value: terrainFeedbackValue(metrics), hint: terrainFeedbackHint(metrics), actionLabel: "Ouvrir le pilotage des retours terrain" },
   ];
 
@@ -107,7 +94,7 @@ export function ChantiersMeasuresBand({
       <div
         role="group"
         aria-label="Mesures du portefeuille chantiers"
-        className="grid grid-cols-2 divide-x divide-y divide-subtle border-t border-subtle sm:grid-cols-4 sm:divide-y-0"
+        className="grid grid-cols-2 divide-x divide-subtle border-t border-subtle"
       >
         {measures.map((measure) => {
           const active = Boolean(measure.selectKey) && activeKey === measure.selectKey;
