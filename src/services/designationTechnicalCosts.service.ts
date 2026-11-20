@@ -48,6 +48,18 @@ export function computeTechnicalTaskCost(
     equipmentHt: 0, indirectIncludedHt: 0, totalHt: null,
   });
   if (!template) return incomplete("Tâche bibliothèque non associée");
+  // Historical PDF imports created one pseudo-task per designation and matched
+  // a library model automatically, sometimes to a completely different trade.
+  // Never treat those mismatched links as validated technical work.
+  const normalize = (value: string | null | undefined) => String(value ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ").trim();
+  if (task.libelle_devis_original && normalize(task.titre_terrain ?? task.titre) !== normalize(template.titre)) {
+    return incomplete("Ancienne tâche importée : confirmer la tâche technique bibliothèque");
+  }
+  if (!Number.isFinite(Number(template.temps_prevu_par_unite_h)) || Number(template.temps_prevu_par_unite_h) <= 0) {
+    return incomplete("Temps de main-d'œuvre par unité manquant dans la bibliothèque");
+  }
   if (!Number.isFinite(quantity) || quantity <= 0) return incomplete("Quantité non renseignée");
   if (!rates || rates.averageEmployeeHourlyCostHt <= 0 || rates.productiveHoursPerYear <= 0) {
     return incomplete("Coût horaire productif non paramétré");
