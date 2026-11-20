@@ -1079,7 +1079,6 @@ export default function ChantierPage() {
     Record<string, TaskCocoPreparation>
   >({});
   const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
-  const [taskDetailEditing, setTaskDetailEditing] = useState(false);
   const [taskDetailTab, setTaskDetailTab] = useState<
     "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
   >("synthese");
@@ -3160,7 +3159,6 @@ export default function ChantierPage() {
 
   useEffect(() => {
     setTaskDetailTab("synthese");
-    setTaskDetailEditing(false);
   }, [taskDetailOpenId, activeTaskDetail?.id, activeTaskDetail?.task_template_id]);
 
   useEffect(() => {
@@ -3997,6 +3995,41 @@ export default function ChantierPage() {
     }
   }
 
+  async function saveTaskDetailField(task: ChantierTaskRow, patch: Parameters<typeof updateTask>[1]) {
+    try {
+      await updateTask(task.id, patch);
+      setTasks((previous) => previous.map((row) => row.id === task.id ? { ...row, ...patch } : row));
+    } catch (error) {
+      await refreshTasksOnly();
+      setToast({ type: "error", msg: error instanceof Error ? error.message : "Enregistrement impossible." });
+    }
+  }
+
+  async function saveTaskDetailProgress(task: ChantierTaskRow, raw: string) {
+    const percent = Number(raw.replace(",", "."));
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      setToast({ type: "error", msg: "Avancement invalide (0 à 100 %)." });
+      return;
+    }
+    const progress = computeTaskProgress(task);
+    const offset = Math.max(-100, Math.min(100, Math.round(percent - (progress.autoPercent ?? 0))));
+    const status = getStatusFromProgress(percent);
+    try {
+      await adminSetTaskProgressOffset(task.id, offset);
+      await updateTask(task.id, {
+        status,
+        quality_status: getQualityStatusFromTaskStatus(status),
+        admin_validation_status: "non_verifie",
+        validated_at: null,
+        reprise_reason: null,
+      });
+      await refreshTasksOnly();
+    } catch (error) {
+      await refreshTasksOnly();
+      setToast({ type: "error", msg: error instanceof Error ? error.message : "Avancement non enregistré." });
+    }
+  }
+
   async function updateTaskAssigneesFromDetail(task: ChantierTaskRow, nextIdsInput: string[]) {
     const nextIds = uniqueIds(nextIdsInput);
     const previousIds = getTaskAssignedIntervenantIds(task);
@@ -4341,7 +4374,6 @@ export default function ChantierPage() {
       setToast({ type: "ok", msg: "Tâche mise à jour." });
       setTaskZoneIdsByTaskId((prev) => ({ ...prev, [t.id]: nextTaskPieceZoneIds }));
       setEditingTaskId(null);
-      setTaskDetailEditing(false);
     } catch (e: any) {
       await refreshTasksOnly();
       setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour tâche." });
@@ -4976,8 +5008,6 @@ export default function ChantierPage() {
               const detailTemplateLabel = getTaskLibraryLabel(activeTaskDetail);
               const detailLot = resolveTaskLotName(activeTaskDetail);
               const detailProgress = computeTaskProgress(activeTaskDetail);
-              const detailPriority = taskPriorityMeta((activeTaskDetail as any).priorite);
-              const detailQuality = ((activeTaskDetail as any).quality_status ?? "a_faire") as TaskQualityStatus;
               const detailDocs = (taskDocumentsByTaskId.get(activeTaskDetail.id) ?? [])
                 .map((docId) => documentsById.get(docId))
                 .filter((doc): doc is ChantierDocumentRow => Boolean(doc));
@@ -5050,52 +5080,9 @@ export default function ChantierPage() {
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-right">
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Avancement</div>
-                          <span className={["rounded-full border px-2 py-0.5 text-[11px] font-semibold", detailPriority.className].join(" ")}>
-                            {detailPriority.label}
-                          </span>
-                        </div>
+                                                  </div>
                         <div className="mt-1 text-lg font-semibold text-slate-950">{detailProgress.displayPercent}%</div>
                       </div>
-                      {!taskDetailEditing ? (
-                        <button type="button" onClick={() => {
-                          startEditTask(activeTaskDetail);
-                          setTaskDetailEditing(true);
-                          setTaskDetailTab("synthese");
-                        }} className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">
-                          Modifier ici
-                        </button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <button type="button" disabled={savingTask} onClick={() => { cancelEditTask(); setTaskDetailEditing(false); }} className="rounded-xl border px-4 py-2 text-sm">Annuler</button>
-                          <button type="button" disabled={savingTask} onClick={() => void saveEditTask(activeTaskDetail)} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                            {savingTask ? "Enregistrement..." : "Enregistrer"}
-                          </button>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void applyTaskQualityDecision(
-                            activeTaskDetail,
-                            detailValidated ? "non_verifie" : "valide_admin",
-                          )
-                        }
-                        className={[
-                          "rounded-xl border px-4 py-2 text-sm",
-                          detailValidated
-                            ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                            : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
-                        ].join(" ")}
-                      >
-                        {detailValidated ? "Dévalider" : "Valider"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void applyTaskQualityDecision(activeTaskDetail, "a_reprendre")}
-                        className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
-                      >
-                        Reprendre
-                      </button>
                       <button
                         type="button"
                         onClick={() => setTaskDetailOpenId(null)}
@@ -5132,48 +5119,32 @@ export default function ChantierPage() {
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4 sm:col-span-2">
                           <div className="text-xs font-semibold text-slate-600">Tâche bibliothèque</div>
-                          {taskDetailEditing ? (
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              <label className="text-xs text-slate-600">Intitulé de la tâche
-                                <input className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editTitre} onChange={(e) => setEditTitre(e.target.value)} />
-                              </label>
-                              <label className="text-xs text-slate-600">Modèle bibliothèque
-                                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editTaskTemplateId} onChange={(e) => applyTaskTemplateToEditTask(e.target.value)}>
-                                  <option value="">Aucun modèle</option>
-                                  {taskLibraryTemplates.map((template) => <option key={template.id} value={template.id}>{template.titre}</option>)}
-                                </select>
-                              </label>
-                              <label className="text-xs text-slate-600">Lot
-                                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editLotSelection} onChange={(e) => { setEditLotSelection(e.target.value); setEditCorpsEtat(e.target.value); }}>
-                                  <option value="">Choisir un lot</option>
-                                  {lotOptions.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
-                                </select>
-                              </label>
-                              <label className="text-xs text-slate-600">Priorité
-                                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={editTaskPriorite} onChange={(e) => setEditTaskPriorite(e.target.value as typeof editTaskPriorite)}>
-                                  <option value="basse">Basse</option><option value="normale">Normale</option><option value="haute">Haute</option><option value="urgente">Urgente</option>
-                                </select>
-                              </label>
-                            </div>
-                          ) : <div className="mt-1 font-medium text-slate-950">{detailTemplateLabel}</div>}
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <label className="text-xs text-slate-600">Intitulé
+                              <input key={activeTaskDetail.id + "-title"} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" defaultValue={detailTitle}
+                                onBlur={(e) => { const title = e.currentTarget.value.trim(); if (title && title !== detailTitle) void saveTaskDetailField(activeTaskDetail, { titre: title, titre_terrain: title }); }} />
+                            </label>
+                            <label className="text-xs text-slate-600">Tâche bibliothèque
+                              <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={activeTaskDetail.task_template_id ?? ""}
+                                onChange={(e) => { const template = taskLibraryTemplateById.get(e.target.value); void saveTaskDetailField(activeTaskDetail, { task_template_id: e.target.value || null, task_template_label: template?.titre ?? null }); }}>
+                                <option value="">Aucune référence</option>
+                                {taskLibraryTemplates.map((template) => <option key={template.id} value={template.id}>{template.titre}</option>)}
+                              </select>
+                            </label>
+                            <label className="text-xs text-slate-600">Lot
+                              <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={detailLot === "A classer" ? "" : detailLot}
+                                onChange={(e) => void saveTaskDetailField(activeTaskDetail, { lot: e.target.value || null, corps_etat: e.target.value || null })}>
+                                <option value="">Sans lot</option>
+                                {lotOptions.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
+                              </select>
+                            </label>
+                          </div>
                           {activeTaskDetail.task_template_id && (
                             <Link to={`/bibliotheque?templateId=${encodeURIComponent(activeTaskDetail.task_template_id)}`}
                               target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:underline">
                               Consulter le modèle bibliothèque
                             </Link>
                           )}
-                        </div>
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Lot</div>
-                          <div className="mt-1 font-semibold text-slate-950">{detailLot}</div>
-                        </div>
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Validation qualité</div>
-                          <div className="mt-1">
-                            <span className={["rounded-full border px-3 py-1 text-xs font-semibold", taskQualityBadgeClass(detailQuality)].join(" ")}>
-                              {detailValidated ? "Validée" : taskQualityLabel(detailQuality)}
-                            </span>
-                          </div>
                         </div>
                       </div>
                     </section>
@@ -5237,17 +5208,31 @@ export default function ChantierPage() {
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Quantité</div>
-                          {taskDetailEditing ? <div className="mt-2 flex gap-2"><input aria-label="Quantité" inputMode="decimal" className="w-24 rounded-lg border px-2 py-1.5" value={editQuantite} onChange={(e) => setEditQuantite(e.target.value)} /><input aria-label="Unité" className="w-24 rounded-lg border px-2 py-1.5" value={editUnite} onChange={(e) => setEditUnite(e.target.value)} /></div> : <div className="mt-1 font-semibold text-slate-950">{activeTaskDetail.quantite ?? "—"} {activeTaskDetail.unite ?? ""}</div>}
+                          <div className="mt-2 flex gap-2">
+                            <input key={activeTaskDetail.id + "-qty"} aria-label="Quantité" inputMode="decimal" className="w-24 rounded-lg border px-2 py-1.5"
+                              defaultValue={String(activeTaskDetail.quantite ?? 1)}
+                              onBlur={(e) => { const value = toNumberOrNull(e.currentTarget.value); if (value !== null && value > 0 && value !== activeTaskDetail.quantite) void saveTaskDetailField(activeTaskDetail, { quantite: value }); }} />
+                            <input key={activeTaskDetail.id + "-unit"} aria-label="Unité" className="w-24 rounded-lg border px-2 py-1.5"
+                              defaultValue={activeTaskDetail.unite ?? ""}
+                              onBlur={(e) => { if (e.currentTarget.value !== (activeTaskDetail.unite ?? "")) void saveTaskDetailField(activeTaskDetail, { unite: e.currentTarget.value.trim() || null }); }} />
+                          </div>
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Temps prévu / passé</div>
-                          {taskDetailEditing ? <input aria-label="Temps prévu en heures" inputMode="decimal" className="mt-2 w-full rounded-lg border px-2 py-1.5" value={editTempsPrevuH} onChange={(e) => setEditTempsPrevuH(e.target.value)} /> : <div className="mt-1 font-semibold text-slate-950">{Math.round(Number(activeTaskDetail.temps_prevu_h ?? 0) * 100) / 100} h prévues · {Math.round(Number(activeTaskDetail.temps_reel_h ?? 0) * 100) / 100} h réalisées</div>}
+                          <input key={activeTaskDetail.id + "-hours"} aria-label="Temps prévu en heures" inputMode="decimal" className="mt-2 w-full rounded-lg border px-2 py-1.5"
+                            defaultValue={String(activeTaskDetail.temps_prevu_h ?? "")} placeholder="Heures prévues"
+                            onBlur={(e) => { const value = toNumberOrNull(e.currentTarget.value); if (value === null || value > 0) void saveTaskDetailField(activeTaskDetail, { temps_prevu_h: value }); }} />
+                          <div className="mt-1 text-xs text-slate-500">{Math.round(Number(activeTaskDetail.temps_reel_h ?? 0) * 100) / 100} h réalisées</div>
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Avancement</div>
-                          <div className="mt-1 font-semibold text-slate-950">
-                            {detailProgress.displayPercent}%
-                          </div>
+                          <div className="mt-1 font-semibold text-slate-950">{detailProgress.displayPercent}% · {detailProgress.displayPercent >= 100 ? "Terminé" : detailProgress.displayPercent > 0 ? "En cours" : "À faire"}</div>
+                          <input key={activeTaskDetail.id + "-progress-" + detailProgress.displayPercent}
+                            aria-label="Avancement en pourcentage" type="range" min={0} max={100} step={5}
+                            defaultValue={detailProgress.displayPercent} className="mt-3 w-full accent-blue-600"
+                            onPointerUp={(e) => void saveTaskDetailProgress(activeTaskDetail, e.currentTarget.value)}
+                            onKeyUp={(e) => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) void saveTaskDetailProgress(activeTaskDetail, e.currentTarget.value); }}
+                          />
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Dates</div>
