@@ -313,22 +313,6 @@ function statusBadge(status: string | null | undefined, t: (key: string) => stri
   return { label: t("common.chantierStatus.PREPARATION"), className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
-function taskQualityLabel(status: TaskQualityStatus) {
-  if (status === "en_cours") return "En cours";
-  if (status === "termine_intervenant") return "Terminé intervenant";
-  if (status === "valide_admin") return "Validé admin";
-  if (status === "a_reprendre") return "À reprendre";
-  return "À faire";
-}
-
-function taskQualityBadgeClass(status: TaskQualityStatus) {
-  if (status === "valide_admin") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (status === "termine_intervenant") return "bg-blue-50 text-blue-700 border-blue-200";
-  if (status === "a_reprendre") return "bg-red-50 text-red-700 border-red-200";
-  if (status === "en_cours") return "bg-amber-50 text-amber-700 border-amber-200";
-  return "bg-slate-50 text-slate-700 border-slate-200";
-}
-
 function isTaskAdminValidated(task: Pick<ChantierTaskRow, "quality_status" | "admin_validation_status">) {
   return task.quality_status === "valide_admin" || task.admin_validation_status === "valide";
 }
@@ -376,20 +360,6 @@ function getTaskLibraryLabel(task: ChantierTaskRow): string {
     String(task.lot ?? task.corps_etat ?? "").trim() ||
     "Tâche chantier"
   );
-}
-
-function taskPriorityMeta(priority: unknown) {
-  const normalized = String(priority ?? "").trim().toLowerCase();
-  if (normalized === "urgente") {
-    return { label: "Urgente", className: "border-red-200 bg-red-50 text-red-700" };
-  }
-  if (normalized === "haute") {
-    return { label: "Haute", className: "border-amber-200 bg-amber-50 text-amber-700" };
-  }
-  if (normalized === "basse") {
-    return { label: "Basse", className: "border-slate-200 bg-slate-50 text-slate-600" };
-  }
-  return { label: "Normale", className: "border-blue-200 bg-blue-50 text-blue-700" };
 }
 
 function formatTaskMoney(value: unknown): string {
@@ -3875,40 +3845,6 @@ export default function ChantierPage() {
     }
   }
 
-  function startEditTask(t: ChantierTaskRow) {
-    setEditingTaskId(t.id);
-    const baseTitre = getTaskDisplayTitle(t);
-    const decoded = decodeQtyUnit(baseTitre);
-    const q = toNumberOrNull((t as any).quantite);
-    const rawUnite = (t as any).unite;
-    const unite = (typeof rawUnite === "string" ? rawUnite.trim() : "") || decoded.unite || "";
-    const resolvedLotName = resolveTaskLotName(t);
-    setEditTitre(baseTitre);
-    setEditCorpsEtat(resolvedLotName === "A classer" ? "" : resolvedLotName);
-    setEditLotSelection(resolvedLotName === "A classer" ? "" : resolvedLotName);
-    setEditLotDraftName("");
-    setEditTaskZoneId((t as any).zone_id ?? "");
-    setEditTaskStepName((t as any).etape_metier ?? "");
-    setEditTaskTemplateId((t as any).task_template_id ?? "");
-    setEditTaskTemplateLabel(
-      String((t as any).task_template_label ?? "").trim() ||
-        String((t as any).titre ?? "").trim() ||
-        resolvedLotName,
-    );
-    setEditTaskDescriptionTechnique(String((t as any).description_technique ?? ""));
-    setEditTaskCaracteristiques(((t as any).caracteristiques ?? []).join("\n"));
-    setEditTaskPriorite(((t as any).priorite ?? "normale") as any);
-    setEditTaskPrixUnitaireDevisHt(toInputNumberString((t as any).prix_unitaire_devis_ht));
-    setEditTaskMontantTotalDevisHt(toInputNumberString((t as any).montant_total_devis_ht));
-    setEditTaskCoutEstimeHt(toInputNumberString((t as any).cout_estime_ht));
-    setEditStatus((t.status ?? "A_FAIRE") as any);
-    setEditTaskQualityStatus((t as any).quality_status ?? "a_faire");
-    setEditTaskRepriseReason(String((t as any).reprise_reason ?? ""));
-    setEditAssignedIntervenantIds(getTaskAssignedIntervenantIds(t));
-    setEditQuantite(String(q ?? decoded.quantite ?? 1));
-    setEditUnite(unite);
-    setEditTempsPrevuH(toInputNumberString((t as any).temps_prevu_h));
-  }
   function cancelEditTask() {
     setEditingTaskId(null);
     setSavingTask(false);
@@ -3927,72 +3863,6 @@ export default function ChantierPage() {
     setEditTaskQualityStatus("a_faire");
     setEditTaskRepriseReason("");
     setEditAssignedIntervenantIds([]);
-  }
-
-  async function applyTaskQualityDecision(
-    task: ChantierTaskRow,
-    decision: "valide_admin" | "a_reprendre" | "non_verifie",
-  ) {
-    const repriseReason =
-      decision === "a_reprendre"
-        ? window.prompt("Motif de reprise ?", task.reprise_reason ?? "")?.trim() ?? ""
-        : "";
-
-    if (decision === "a_reprendre" && !repriseReason) {
-      setToast({ type: "error", msg: "Motif de reprise obligatoire." });
-      return;
-    }
-
-    const nextQualityStatus =
-      decision === "non_verifie" ? getTaskQualityResetStatus(task) : decision;
-    const nextStatus =
-      decision === "non_verifie"
-        ? getStatusFromProgress(computeTaskProgress(task).displayPercent)
-        : getTaskStatusFromQualityStatus(nextQualityStatus);
-    const nextAdminValidationStatus: ChantierTaskRow["admin_validation_status"] =
-      decision === "valide_admin" ? "valide" : decision === "a_reprendre" ? "a_reprendre" : "non_verifie";
-    const patch = {
-      status: nextStatus,
-      quality_status: nextQualityStatus,
-      admin_validation_status: nextAdminValidationStatus,
-      validated_at: decision === "valide_admin" ? new Date().toISOString() : null,
-      reprise_reason: decision === "a_reprendre" ? repriseReason : null,
-    };
-
-    setTasks((prev) => prev.map((row) => (row.id === task.id ? { ...row, ...patch } : row)));
-
-    try {
-      await updateTask(task.id, patch as any);
-      await recordChantierActivity({
-        actionType: decision === "non_verifie" ? "updated" : "validated",
-        entityType: "task",
-        entityId: task.id,
-        reason:
-          decision === "valide_admin"
-            ? "Tâche validée par admin"
-            : decision === "a_reprendre"
-              ? "Tâche marquée à reprendre"
-              : "Validation tâche retirée",
-        changes: {
-          from_quality_status: task.quality_status,
-          to_quality_status: nextQualityStatus,
-          admin_validation_status: patch.admin_validation_status,
-          reprise_reason: patch.reprise_reason,
-        },
-      });
-      setToast({
-        type: "ok",
-        msg:
-          decision === "valide_admin"
-            ? "Tâche validée."
-            : decision === "a_reprendre"
-              ? "Tâche marquée à reprendre."
-              : "Validation retirée.",
-      });
-    } catch (e: any) {
-      await refreshTasksOnly();
-      setToast({ type: "error", msg: e?.message ?? "Erreur validation qualité." });
-    }
   }
 
   async function saveTaskDetailField(task: ChantierTaskRow, patch: Parameters<typeof updateTask>[1]) {
@@ -5005,7 +4875,6 @@ export default function ChantierPage() {
           >
             {(() => {
               const detailTitle = getTaskDisplayTitle(activeTaskDetail);
-              const detailTemplateLabel = getTaskLibraryLabel(activeTaskDetail);
               const detailLot = resolveTaskLotName(activeTaskDetail);
               const detailProgress = computeTaskProgress(activeTaskDetail);
               const detailDocs = (taskDocumentsByTaskId.get(activeTaskDetail.id) ?? [])
@@ -5018,7 +4887,6 @@ export default function ChantierPage() {
                 detailPrixVente !== null && detailCout !== null
                   ? Math.round((detailPrixVente - detailCout) * 100) / 100
                   : null;
-              const detailValidated = isTaskAdminValidated(activeTaskDetail);
               const detailReserves = reserves.filter((reserve) => reserve.task_id === activeTaskDetail.id);
               const detailConsignes = consignes.filter((consigne) => consigne.task_id === activeTaskDetail.id);
               const detailTimeNotes = timeEntries.filter(
@@ -6883,7 +6751,6 @@ export default function ChantierPage() {
                   const assignedNames = getTaskAssignedIntervenantNames(t);
                   const taskZoneLabel = resolveTaskZoneSummary(t);
                   const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
-                  const taskValidated = isTaskAdminValidated(t);
                   const taskRepriseReason = String((t as any).reprise_reason ?? "").trim();
 
                   return (
@@ -7237,11 +7104,6 @@ export default function ChantierPage() {
                                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Avancement</div>
                                 <div className="mt-1 text-2xl font-semibold text-slate-950">{avancementPct}%</div>
                               </div>
-                              {taskValidated ? (
-                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
-                                  Validée
-                                </span>
-                              ) : null}
                             </div>
                             <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
                               <div
@@ -7251,23 +7113,7 @@ export default function ChantierPage() {
                             </div>
                             {!isAdjustingProgress ? (
                               <div className="mt-3 flex flex-wrap justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void applyTaskQualityDecision(
-                                      t,
-                                      taskValidated ? "non_verifie" : "valide_admin",
-                                    )
-                                  }
-                                  className={[
-                                    "rounded-xl border px-3 py-2 text-xs",
-                                    taskValidated
-                                      ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                                      : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
-                                  ].join(" ")}
-                                >
-                                  {taskValidated ? "Dévalider" : "Valider"}
-                                </button>
+                                
                                 <button
                                   type="button"
                                   onClick={() => startTaskProgressEdit(t)}
