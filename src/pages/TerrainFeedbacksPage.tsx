@@ -125,6 +125,7 @@ export default function TerrainFeedbacksPage({
   const urlFeedbackId = searchParams.get("feedbackId") ?? "";
   const workflowScope = getWorkflowScope(searchParams);
   const highlightedFeedbackRef = useRef<string | null>(null);
+  const requestIdRef = useRef(0);
   const [rows, setRows] = useState<TerrainFeedbackRow[]>([]);
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
@@ -254,6 +255,7 @@ export default function TerrainFeedbacksPage({
   }, []);
 
   const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -268,22 +270,28 @@ export default function TerrainFeedbacksPage({
         listIntervenants(),
         listTerrainFeedbackResponsibles().catch(() => []),
       ]);
+      if (requestId !== requestIdRef.current) return;
       setRows(feedbackRows);
       setChantiers(chantierRows);
       setIntervenants(intervenantRows);
       setResponsibles(responsibleRows);
       syncDrafts(feedbackRows);
     } catch (err: any) {
+      if (requestId !== requestIdRef.current) return;
       setError(err?.message ?? t("terrainFeedback.admin.loadError"));
       setRows([]);
       syncDrafts([]);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [filterCategory, filterChantierId, filterIntervenantId, filterStatus, syncDrafts, t]);
 
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
   useEffect(() => {
     void refresh();
+    return () => { requestIdRef.current += 1; };
   }, [refresh]);
 
   function updateDraft(id: string, patch: Partial<DraftState>) {
@@ -325,7 +333,7 @@ export default function TerrainFeedbacksPage({
         treatment_comment: draft.treatment_comment || null,
       });
       await appendFeedbackActivity(row, draft, assignedToName);
-      await refresh();
+      await refreshRef.current();
     } catch (err: any) {
       setError(err?.message ?? t("terrainFeedback.admin.saveError"));
     } finally {
@@ -359,7 +367,7 @@ export default function TerrainFeedbacksPage({
         treatment_comment: nextDraft.treatment_comment,
       });
       await appendFeedbackActivity(row, nextDraft, assignedToName);
-      await refresh();
+      await refreshRef.current();
     } catch (err: any) {
       setError(err?.message ?? t("terrainFeedback.admin.saveError"));
     } finally {
@@ -954,3 +962,4 @@ export default function TerrainFeedbacksPage({
     </div>
   );
 }
+
