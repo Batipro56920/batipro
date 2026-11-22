@@ -240,19 +240,20 @@ export default function ChantierPreparationSection({ chantierId, onTaskOpen }: {
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               Preparation chantier
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-950">Organiser avant execution</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">Préparer les prestations du chantier</div>
             <p className="mt-1 max-w-3xl text-sm text-slate-500">
-              Ouvrez chaque tâche pour vérifier la synthèse, les intervenants, la localisation et la préparation technique. La production reste disponible pour le suivi terrain.
+              Chaque désignation du devis réunit le modèle technique, les moyens à mobiliser,
+              la localisation facultative, les intervenants et les dates. Les résultats réels se saisissent dans Produire.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setTaskDrawerOpen(true)}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-            >
-              Créer une tâche technique
-            </button>
+            <details className="self-start rounded-xl border border-slate-200 px-3 py-2">
+              <summary className="cursor-pointer text-sm text-slate-600">Autres actions</summary>
+              <button type="button" onClick={() => setTaskDrawerOpen(true)}
+                className="mt-2 block text-left text-sm font-semibold text-blue-700">
+                Créer une tâche technique indépendante
+              </button>
+            </details>
             <Link to={`/chantiers/${encodeURIComponent(chantierId)}/execution`}
               className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
               Suivre les tâches en production

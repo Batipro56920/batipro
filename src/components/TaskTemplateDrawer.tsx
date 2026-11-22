@@ -28,6 +28,7 @@ import { listSuppliers, type SupplierRow } from "../services/suppliers.service";
 import { TaskCostEngine } from "../features/task-cost-engine/TaskCostEngine";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../services/indirectCosts.service";
 import { equipmentTaskAmounts } from "../services/companySettings.service";
+import { loadTaskLaborObservation, type TaskLaborObservation } from "../services/taskLaborObservations.service";
 import { DEFAULT_QUOTE_MARGIN_RATE, salePriceFromCost } from "../services/taskCostBasis";
 import {
   generateWithCoco,
@@ -584,6 +585,8 @@ export default function TaskTemplateDrawer({
   const [preparationSchemaReady, setPreparationSchemaReady] = useState(true);
   const [preparationError, setPreparationError] = useState<string | null>(null);
   const [measuredLoss, setMeasuredLoss] = useState<MeasuredMaterialLoss[]>([]);
+  const [laborObservation, setLaborObservation] = useState<TaskLaborObservation | null>(null);
+  const [laborObservationError, setLaborObservationError] = useState<string | null>(null);
   const [applyingLossId, setApplyingLossId] = useState<string | null>(null);
   const [applyLossMessage, setApplyLossMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -757,6 +760,11 @@ export default function TaskTemplateDrawer({
     const templateId = template.id;
 
     let alive = true;
+    setLaborObservation(null);
+    setLaborObservationError(null);
+    void loadTaskLaborObservation(templateId)
+      .then((observation) => { if (alive) setLaborObservation(observation); })
+      .catch((err: unknown) => { if (alive) setLaborObservationError(err instanceof Error ? err.message : "Analyse des heures indisponible."); });
 
     async function loadPreparation() {
       setPreparationLoading(true);
@@ -1881,6 +1889,26 @@ export default function TaskTemplateDrawer({
                     des salariés productifs de l'entreprise. La marge vide reprend la marge par défaut du chiffrage.
                   </div>
                 </div>
+                {template && laborObservation?.measuredHoursPerUnit !== null && laborObservation?.measuredHoursPerUnit !== undefined && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm">
+                    <div className="font-semibold text-blue-900">Retour d'expérience chantier</div>
+                    <p className="mt-1 text-xs text-blue-800">
+                      {laborObservation.taskCount} tâche(s) exploitable(s) ·
+                      {laborObservation.totalHours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} heures pour
+                      {laborObservation.executedQuantity.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} {unite || "unités"} réellement déclarées.
+                    </p>
+                    <p className="mt-1 font-semibold text-blue-950">
+                      Ratio mesuré : {laborObservation.measuredHoursPerUnit.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} h / {unite || "unité"}
+                    </p>
+                    <p className="mt-1 text-xs text-blue-800">Ratio de référence actuel : {tempsParUnite || "Non renseigné"} h / {unite || "unité"}.</p>
+                    {laborObservation.excludedTasks > 0 && <p className="mt-1 text-xs text-blue-800">{laborObservation.excludedTasks} tâche(s) ignorée(s) car les pointages n'indiquent pas toutes les quantités exécutées.</p>}
+                    <button type="button" disabled={busy} className="mt-2 rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-800"
+                      onClick={() => setTempsParUnite(String(Math.round(laborObservation.measuredHoursPerUnit! * 1000) / 1000))}>
+                      Utiliser ce ratio dans le brouillon (à enregistrer)
+                    </button>
+                  </div>
+                )}
+                {laborObservationError && <p className="text-xs text-slate-500">{laborObservationError}</p>}
                 <div className="grid gap-2 md:grid-cols-3">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Temps estimé</div>
