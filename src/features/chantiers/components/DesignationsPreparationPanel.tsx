@@ -102,7 +102,8 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
   }, [chantierId, taskIdsKey, reloadVersion]);
 
   function toggleDesignation(id: string) {
-    setExpandedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+    // Only one prestation sheet is expanded at a time.
+    setExpandedIds((current) => current.includes(id) ? [] : [id]);
   }
 
   useEffect(() => {
@@ -375,8 +376,16 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                                 <select disabled={workingId !== null} value={task.task_template_id ?? ""}
                                   onChange={(e) => {
                                     const template = templateMap.get(e.target.value);
-                                    void saveTaskField(task, { task_template_id: template?.id ?? null,
-                                      task_template_label: template?.titre ?? null });
+                                    void saveTaskField(task, {
+                                      task_template_id: template?.id ?? null,
+                                      task_template_label: template?.titre ?? null,
+                                      // A former PDF pseudo-task must become a genuine technical task.
+                                      // Keep the sold designation unchanged on the quote line.
+                                      ...(template && invalidHistoricalLink ? {
+                                        titre: template.titre,
+                                        titre_terrain: template.titre,
+                                      } : {}),
+                                    });
                                   }}
                                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900">
                                   <option value="">Choisir une tâche adaptée à la prestation</option>
