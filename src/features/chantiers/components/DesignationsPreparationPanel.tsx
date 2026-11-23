@@ -102,7 +102,8 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
   }, [chantierId, taskIdsKey, reloadVersion]);
 
   function toggleDesignation(id: string) {
-    setExpandedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+    // Only one prestation sheet is expanded at a time.
+    setExpandedIds((current) => current.includes(id) ? [] : [id]);
   }
 
   useEffect(() => {
@@ -335,12 +336,13 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                     const cost = taskCosts.get(task.id);
                     const assigned = assigneesByTask[task.id] ?? (task.intervenant_id ? [task.intervenant_id] : []);
                     const selectedZones = zonesByTask[task.id] ?? (task.zone_id ? [task.zone_id] : []);
-                    const estimate = task.task_template_id && preparation
+                    const invalidHistoricalLink = cost?.reason?.startsWith("Ancienne tâche importée") ?? false;
+                    const estimate = !invalidHistoricalLink && task.task_template_id && preparation
                       ? estimateTaskTemplatePreparation(task,
                           preparation.materialsByTemplateId[task.task_template_id] ?? [],
                           preparation.equipmentByTemplateId[task.task_template_id] ?? []) : null;
                     const taskRequests = requests.filter((request) => request.task_id === task.id && request.statut_commande !== "annule");
-                    const timePlanned = cost?.status === "calculated" ? cost.hours : task.temps_prevu_h;
+                    const timePlanned = cost?.status === "calculated" ? cost.hours : null;
                     const taskEntries = timeEntries.filter((row) => row.task_id === task.id);
                     const actualHours = taskEntries.reduce((sum, row) => sum + Number(row.duration_hours ?? 0), 0);
                     const executedQuantity = taskEntries.reduce((sum, row) => sum + Number(row.quantite_realisee ?? 0), 0);
@@ -357,100 +359,171 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                     });
                     const materialActualHt = materialCostKnown ? materialRows.reduce((sum, used) =>
                       sum + used.quantite_consommee * Number(trackedRatios.find((ratio) => ratio.id === used.material_ratio_id)?.purchase_price_ht ?? 0), 0) : null;
-                    return <section key={task.id} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <button type="button" onClick={() => onTaskOpen(task.id)} className="font-semibold text-blue-700 hover:underline">
-                          {task.titre_terrain || task.titre}
-                        </button>
-                        <span className="font-semibold">{eur(cost?.totalHt ?? null)} prévu</span>
-                      </div>
+                    return <section key={task.id} className="rounded-xl border border-slate-200 bg-white text-sm">
+                      {linked.length > 1 && (
+                        <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                          <button type="button" onClick={() => onTaskOpen(task.id)}
+                            className="text-left font-medium text-blue-700 hover:underline">{task.titre_terrain || task.titre}</button>
+                          <span className="text-xs text-slate-500">{eur(cost?.totalHt ?? null)}</span>
+                        </div>
+                      )}
                       {(viewByLine[line.id] ?? defaultView) !== "produire" ? (
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <label className="space-y-1 text-xs text-slate-600">Tâche bibliothèque
-                            <select disabled={workingId !== null} value={task.task_template_id ?? ""}
-                              onChange={(e) => {
-                                const template = templateMap.get(e.target.value);
-                                void saveTaskField(task, { task_template_id: template?.id ?? null,
-                                  task_template_label: template?.titre ?? null });
-                              }} className="w-full rounded-lg border bg-white px-2 py-2 text-sm text-slate-900">
-                              <option value="">Choisir la référence technique</option>
-                              {templates.map((template) => <option key={template.id} value={template.id}>{template.titre}</option>)}
-                            </select>
-                          </label>
-                          <div className="space-y-1">
-                            <div className="text-xs text-slate-600">Quantité et temps prévus</div>
-                            <div className="rounded-lg border border-slate-200 bg-white p-2">
-                              {task.quantite ?? "—"} {task.unite ?? ""} · {timePlanned ?? "—"} h
+                        <div className="divide-y divide-slate-100">
+                          <div className="px-3 py-3">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <label className="min-w-[220px] flex-1 text-xs text-slate-500">
+                                <span className="mb-1 block font-semibold text-slate-800">Tâche bibliothèque associée</span>
+                                <select disabled={workingId !== null} value={task.task_template_id ?? ""}
+                                  onChange={(e) => {
+                                    const template = templateMap.get(e.target.value);
+                                    void saveTaskField(task, {
+                                      task_template_id: template?.id ?? null,
+                                      task_template_label: template?.titre ?? null,
+                                      // A former PDF pseudo-task must become a genuine technical task.
+                                      // Keep the sold designation unchanged on the quote line.
+                                      ...(template && invalidHistoricalLink ? {
+                                        titre: template.titre,
+                                        titre_terrain: template.titre,
+                                      } : {}),
+                                    });
+                                  }}
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900">
+                                  <option value="">Choisir une tâche adaptée à la prestation</option>
+                                  {templates.map((template) => <option key={template.id} value={template.id}>{template.titre}</option>)}
+                                </select>
+                              </label>
                               <button type="button" onClick={() => onTaskOpen(task.id)}
-                                className="ml-3 text-xs font-semibold text-blue-700 hover:underline">Adapter</button>
+                                className="mt-auto rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                                Adapter
+                              </button>
+                            </div>
+                            {invalidHistoricalLink && <p className="mt-2 text-xs text-amber-700">
+                              Ancien rattachement automatique à vérifier : les besoins de ce modèle ne sont pas utilisés tant qu'il n'est pas confirmé.
+                            </p>}
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <div className="rounded-lg bg-slate-50 p-3">
+                                <div className="text-xs text-slate-500">Temps prévisionnel · {task.quantite ?? "—"} {task.unite ?? ""}</div>
+                                <div className="mt-1 font-semibold text-slate-900">
+                                  {timePlanned === null ? "Non calculé" : `${timePlanned.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h`}
+                                </div>
+                              </div>
+                              <div className="rounded-lg bg-slate-50 p-3">
+                                <div className="text-xs text-slate-500">Coût de revient technique</div>
+                                <div className="mt-1 font-semibold text-slate-900">{eur(cost?.totalHt ?? null)}</div>
+                              </div>
                             </div>
                           </div>
-                          <div className="space-y-1">
-                            <div className="text-xs font-semibold text-slate-700">Architecture — facultative</div>
-                            <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border bg-white p-2">
+
+                          <details className="group px-3 py-1">
+                            <summary className="flex cursor-pointer list-none items-center gap-3 py-3 [&::-webkit-details-marker]:hidden">
+                              <span aria-hidden="true" className="text-lg text-slate-400">⌖</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block font-semibold text-slate-900">Localisation</span>
+                                <span className="block truncate text-xs text-slate-500">
+                                  {selectedZones.length
+                                    ? selectedZones.map((id) => zonePaths.get(id) ?? zones.find((zone) => zone.id === id)?.nom ?? "Pièce").join(" · ")
+                                    : "Facultative · aucune pièce sélectionnée"}
+                                </span>
+                              </span>
+                              <span aria-hidden="true" className="text-slate-500 group-open:rotate-180">⌄</span>
+                            </summary>
+                            <div className="space-y-2 pb-3 pl-7">
                               {zones.filter((zone) => zone.zone_type === "piece").map((zone) =>
-                                <label key={zone.id} className="flex items-center gap-2 text-xs text-slate-700">
+                                <label key={zone.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs text-slate-700 hover:bg-slate-50">
                                   <input type="checkbox" disabled={workingId !== null} checked={selectedZones.includes(zone.id)}
                                     onChange={(e) => void setTaskZones(task, e.target.checked
                                       ? [...selectedZones, zone.id] : selectedZones.filter((id) => id !== zone.id))} />
                                   {zonePaths.get(zone.id) ?? zone.nom}
                                 </label>)}
-                              {zones.filter((zone) => zone.zone_type === "piece").length === 0 && <span className="text-xs text-slate-400">Aucune pièce configurée ; localisation facultative</span>}
+                              {zones.every((zone) => zone.zone_type !== "piece") &&
+                                <p className="text-xs text-slate-500">Aucune pièce configurée. La localisation n'est pas obligatoire.</p>}
                             </div>
-                          </div>
-                          <div className="space-y-1">
-                            <div className="text-xs font-semibold text-slate-700">Intervenants — accès et affectation</div>
-                            <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border bg-white p-2">
-                              {intervenants.map((person) => <label key={person.id} className="flex items-center gap-2 text-xs text-slate-700">
-                                <input type="checkbox" disabled={workingId !== null} checked={assigned.includes(person.id)}
-                                  onChange={(e) => void setAssignees(task, e.target.checked
-                                    ? [...assigned, person.id] : assigned.filter((id) => id !== person.id))} />
-                                {person.nom}
-                              </label>)}
-                              {intervenants.length === 0 && <span className="text-xs text-slate-400">Aucun intervenant affectable au chantier</span>}
-                            </div>
-                          </div>
-                          <div className="space-y-1 md:col-span-2">
-                            <div className="text-xs font-semibold text-slate-700">Dates de préparation / planning</div>
-                            <div className="flex flex-wrap gap-2">
-                              <label className="text-xs text-slate-500">Début
-                                <input key={task.id + "-start-" + (task.date_debut ?? "")} type="date" defaultValue={task.date_debut ?? ""}
-                                  onBlur={(e) => { if (e.target.value !== (task.date_debut ?? "")) void saveTaskField(task, { date_debut: e.target.value || null }); }}
-                                  className="mt-1 block rounded-lg border bg-white px-2 py-2 text-sm"/>
-                              </label>
-                              <label className="text-xs text-slate-500">Fin
-                                <input key={task.id + "-end-" + (task.date_fin ?? "")} type="date" defaultValue={task.date_fin ?? ""}
-                                  onBlur={(e) => { if (e.target.value !== (task.date_fin ?? "")) void saveTaskField(task, { date_fin: e.target.value || null }); }}
-                                  className="mt-1 block rounded-lg border bg-white px-2 py-2 text-sm"/>
-                              </label>
-                              <span className="self-end pb-2 text-xs text-slate-500">Affectations et dates partagées avec la tâche chantier</span>
-                            </div>
-                          </div>
-                          <div className="space-y-1 md:col-span-2">
-                            <div className="text-xs font-semibold text-slate-700">Besoins théoriques du modèle</div>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <div className="rounded-lg border bg-white p-2">
-                                <div className="mb-1 font-semibold">Matériaux / consommables</div>
-                                {estimate?.materials.map((material) => <div key={material.id} className="text-xs">
-                                  {material.material_name} : {material.estimated_quantity} {material.ratio_unit}
-                                </div>)}
-                                {!estimate?.materials.length && <span className="text-xs text-slate-500">Aucun ratio renseigné</span>}
+                          </details>
+
+                          <details className="group px-3 py-1">
+                            <summary className="flex cursor-pointer list-none items-center gap-3 py-3 [&::-webkit-details-marker]:hidden">
+                              <span aria-hidden="true" className="text-lg text-slate-400">♙</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block font-semibold text-slate-900">Intervenants et planning</span>
+                                <span className="block truncate text-xs text-slate-500">
+                                  {assigned.length
+                                    ? `${assigned.length} intervenant${assigned.length > 1 ? "s" : ""}`
+                                    : "Aucun intervenant"}
+                                  {" · "}{task.date_debut && task.date_fin ? `${task.date_debut} au ${task.date_fin}` : "Dates à définir"}
+                                </span>
+                              </span>
+                              <span aria-hidden="true" className="text-slate-500 group-open:rotate-180">⌄</span>
+                            </summary>
+                            <div className="space-y-3 pb-3 pl-7">
+                              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                                {intervenants.map((person) => <label key={person.id} className="flex items-center gap-2 text-sm text-slate-700">
+                                  <input type="checkbox" disabled={workingId !== null} checked={assigned.includes(person.id)}
+                                    onChange={(e) => void setAssignees(task, e.target.checked
+                                      ? [...assigned, person.id] : assigned.filter((id) => id !== person.id))} />
+                                  {person.nom}
+                                </label>)}
+                                {intervenants.length === 0 && <span className="text-xs text-slate-500">Aucun intervenant affectable</span>}
                               </div>
-                              <div className="rounded-lg border bg-white p-2">
-                                <div className="mb-1 font-semibold">Matériel à mobiliser</div>
-                                {estimate?.equipment.filter((equipment) => equipment.is_required).map((equipment) => <div key={equipment.id} className="text-xs">
-                                  {equipment.equipment_name} {equipment.default_quantity ? `× ${equipment.default_quantity}` : ""}
-                                </div>)}
-                                {!estimate?.equipment.some((equipment) => equipment.is_required) && <span className="text-xs text-slate-500">Aucun matériel défini</span>}
+                              <div className="flex flex-wrap gap-3">
+                                <label className="text-xs text-slate-600">Début
+                                  <input key={task.id + "-start-" + (task.date_debut ?? "")} type="date" defaultValue={task.date_debut ?? ""}
+                                    onBlur={(e) => { if (e.target.value !== (task.date_debut ?? "")) void saveTaskField(task, { date_debut: e.target.value || null }); }}
+                                    className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"/>
+                                </label>
+                                <label className="text-xs text-slate-600">Fin
+                                  <input key={task.id + "-end-" + (task.date_fin ?? "")} type="date" defaultValue={task.date_fin ?? ""}
+                                    onBlur={(e) => { if (e.target.value !== (task.date_fin ?? "")) void saveTaskField(task, { date_fin: e.target.value || null }); }}
+                                    className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"/>
+                                </label>
+                              </div>
+                              <p className="text-xs text-slate-500">Affectations et dates enregistrées sur la tâche. La synchronisation avec le planning général reste à vérifier.</p>
+                            </div>
+                          </details>
+
+                          <details className="group px-3 py-1">
+                            <summary className="flex cursor-pointer list-none items-center gap-3 py-3 [&::-webkit-details-marker]:hidden">
+                              <span aria-hidden="true" className="text-lg text-slate-400">▣</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block font-semibold text-slate-900">Approvisionnement et matériel</span>
+                                <span className="block truncate text-xs text-slate-500">
+                                  {invalidHistoricalLink ? "Référence technique à confirmer" :
+                                    `${estimate?.materials.length ?? 0} besoin(s) · ${estimate?.equipment.filter((equipment) => equipment.is_required).length ?? 0} matériel(s) · ${taskRequests.length} commande(s)`}
+                                </span>
+                              </span>
+                              <span aria-hidden="true" className="text-slate-500 group-open:rotate-180">⌄</span>
+                            </summary>
+                            <div className="space-y-3 pb-3 pl-7">
+                              {invalidHistoricalLink ? (
+                                <p className="text-sm text-slate-600">Choisissez la bonne tâche bibliothèque avant d'utiliser ses besoins.</p>
+                              ) : (
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div>
+                                    <div className="mb-1 text-xs font-semibold text-slate-700">Matériaux et consommables</div>
+                                    {estimate?.materials.map((material) => <p key={material.id} className="text-xs text-slate-600">
+                                      {material.material_name} : {material.estimated_quantity} {material.ratio_unit}
+                                    </p>)}
+                                    {!estimate?.materials.length && <p className="text-xs text-slate-500">Aucun ratio défini</p>}
+                                  </div>
+                                  <div>
+                                    <div className="mb-1 text-xs font-semibold text-slate-700">Matériel à mobiliser</div>
+                                    {estimate?.equipment.filter((equipment) => equipment.is_required).map((equipment) =>
+                                      <p key={equipment.id} className="text-xs text-slate-600">
+                                        {equipment.equipment_name} {equipment.default_quantity ? `× ${equipment.default_quantity}` : ""}
+                                      </p>)}
+                                    {!estimate?.equipment.some((equipment) => equipment.is_required) &&
+                                      <p className="text-xs text-slate-500">Aucun matériel défini</p>}
+                                  </div>
+                                </div>
+                              )}
+                              <div className="border-t border-slate-100 pt-2">
+                                <div className="mb-1 text-xs font-semibold text-slate-700">Commandes liées</div>
+                                {taskRequests.length ? taskRequests.map((request) =>
+                                  <p key={request.id} className="text-xs text-slate-600">
+                                    {request.titre} · {request.statut_commande === "a_commander" ? "À commander" : request.statut_commande === "commande" ? "Commandé" : "Livré"}
+                                  </p>) : <p className="text-xs text-slate-500">Aucune commande liée. Les besoins théoriques ne sont pas des achats.</p>}
                               </div>
                             </div>
-                          </div>
-                          <div className="space-y-1 md:col-span-2">
-                            <div className="font-semibold text-slate-700">Approvisionnements de cette tâche</div>
-                            {taskRequests.length ? taskRequests.map((request) =>
-                              <div key={request.id} className="text-xs text-slate-600">{request.titre} · {request.statut_commande === "a_commander" ? "À commander" : request.statut_commande === "commande" ? "Commandé" : "Livré"}</div>)
-                              : <p className="text-xs text-slate-500">Aucune commande liée : besoins théoriques seulement.</p>}
-                          </div>
+                          </details>
                         </div>
                       ) : (
                         <div className="space-y-3">
@@ -553,7 +626,12 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                       )}
                     </section>;
                   })}
-                  <div className="flex flex-wrap items-center gap-2">
+                  {(linked.length === 0 || (viewByLine[line.id] ?? defaultView) !== "produire") && (
+                    <details className="rounded-lg border border-dashed border-slate-200 p-2">
+                      <summary className="cursor-pointer text-xs font-medium text-slate-500">
+                        {linked.length === 0 ? "Associer une tâche bibliothèque à cette prestation" : "Opérations techniques supplémentaires (facultatif)"}
+                      </summary>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
                     <select aria-label={`Choisir une tâche technique pour ${line.designation}`} value={selection[line.id] ?? ""}
                       onChange={(event) => setSelection((before) => ({ ...before, [line.id]: event.target.value }))}
                       className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
@@ -565,7 +643,9 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                       className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
                       Ajouter la tâche technique
                     </button>
-                  </div>
+                      </div>
+                    </details>
+                  )}
                   {unlinked.length > 0 && <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-slate-500">Ou rattacher une tâche existante :</span>
                     {unlinked.map((task) => <button key={task.id} type="button" disabled={workingId !== null}
