@@ -634,7 +634,6 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                       className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
                       Ajouter la tâche technique
                     </button>
-                  </div>
                       </div>
                     </details>
                   )}
