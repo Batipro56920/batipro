@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { createTask, updateTask, type ChantierTaskRow } from "../../../services/chantierTasks.service";
-import { listChantierZones, buildChantierZonePathMap, type ChantierZoneRow } from "../../../services/chantierZones.service";
+import { listChantierZones, buildChantierZonePathMap, collectDescendantPieceIds, findBestZoneAnchorForSelectedPieceIds, type ChantierZoneRow } from "../../../services/chantierZones.service";
+import ChantierLocationTree from "./ChantierLocationTree";
 import { listTaskZoneIdsByTaskIds, replaceTaskZoneIds } from "../../../services/chantierTaskZones.service";
 import { listTaskAssigneeIdsByTaskIds, replaceTaskAssignees } from "../../../services/chantierTaskAssignees.service";
 import { listIntervenantsByChantierId, type IntervenantRow } from "../../../services/intervenants.service";
 import { listChantierPurchaseRequests, type ChantierPurchaseRequestRow } from "../../../services/chantierPurchaseRequests.service";
 import { createChantierTimeEntry, listChantierTimeEntriesByChantierId, type ChantierTimeEntryRow } from "../../../services/chantierTimeEntries.service";
 import { createTaskMaterialConsumption, listTaskMaterialConsumptions, type TaskMaterialConsumption } from "../../../services/chantierTaskMaterialConsumptions.service";
-import { listDevisLignes, type DevisLigneRow, type DevisRow } from "../../../services/devis.service";
+import { listDevisLignes, updateDevisLigne, type DevisLigneRow, type DevisRow } from "../../../services/devis.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "../../../services/taskLibrary.service";
 import {
@@ -33,6 +34,16 @@ type Props = {
 const eur = (value: number | null) => value === null ? "Non calculé" :
   value.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
+/** Some imported Obat lines contain quantity, unit price, VAT and total in the title.
+ * Remove those only for display; the source remains untouched until an explicit save.
+ */
+function readableDesignation(raw: string): string {
+  return raw.trim()
+    .replace(/^\d+(?:\.\d+)*\s+(?=[\p{L}])/u, "")
+    .replace(/\s+\d+(?:[,.]\d+)?\s*(?:m²|m2|ml|m³|m3|u|unité(?:s)?|forfait|ens|h)\s+\d+(?:[,.]\d+)?\s*€(?:\s+\d+(?:[,.]\d+)?\s*%)?\s+\d+(?:[,.]\d+)?\s*€\s*$/iu, "")
+    .trim();
+}
+
 export default function DesignationsPreparationPanel({ chantierId, devis, tasks, onRefresh, onTaskOpen, defaultView = "preparer" }: Props) {
   const [lines, setLines] = useState<DevisLigneRow[]>([]);
   const [templates, setTemplates] = useState<TaskTemplateRow[]>([]);
@@ -42,6 +53,8 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const [designationDraft, setDesignationDraft] = useState("");
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [showUnlinked, setShowUnlinked] = useState(false);
   const [viewByLine, setViewByLine] = useState<Record<string, "preparer" | "produire">>({});
@@ -149,6 +162,29 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
 
   const unlinked = tasks.filter((task) => !task.devis_ligne_id);
 
+  async function saveDesignation(line: DevisLigneRow) {
+    const designation = designationDraft.trim();
+    if (!designation) {
+      setError("La désignation ne peut pas être vide.");
+      return;
+    }
+    if (designation === line.designation) {
+      setEditingLineId(null);
+      return;
+    }
+    setWorkingId(line.id);
+    setError(null);
+    try {
+      const updated = await updateDevisLigne(line.id, { designation });
+      setLines((previous) => previous.map((item) => item.id === line.id ? updated : item));
+      setEditingLineId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossible d'enregistrer la désignation.");
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
   async function saveTaskField(task: ChantierTaskRow, patch: Parameters<typeof updateTask>[1]) {
     setWorkingId(task.id);
     setError(null);
@@ -182,7 +218,7 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
     setWorkingId(task.id);
     try {
       await replaceTaskZoneIds(task.id, ids);
-      await updateTask(task.id, { zone_id: ids.length === 1 ? ids[0] : null });
+      await updateTask(task.id, { zone_id: findBestZoneAnchorForSelectedPieceIds(ids, zones) });
       await onRefresh();
     } catch (err) {
       setZonesByTask((before) => ({ ...before, [task.id]: previous }));
@@ -305,7 +341,7 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                   className="flex w-full flex-wrap items-center justify-between gap-3 rounded-xl p-3 text-left hover:bg-slate-50">
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs text-slate-500">{line.corps_etat ?? "Sans lot"}</span>
-                    <span className="block font-semibold text-slate-950">{line.designation}</span>
+                    <span className="block font-semibold text-slate-950">{readableDesignation(line.designation)}</span>
                     <span className="mt-0.5 block text-xs text-slate-500">
                       {line.quantite ?? "—"} {line.unite ?? ""} · Vente {eur(summary.saleHt)} · {linked.length} tâche{linked.length > 1 ? "s" : ""} technique{linked.length > 1 ? "s" : ""}
                     </span>
@@ -322,7 +358,14 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                 {expandedIds.includes(line.id) && (
                 <div id={`designation-details-${line.id}`} className="space-y-2 border-t border-slate-100 px-3 pb-3 pt-3">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-semibold text-slate-500">Fiche de la prestation</div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs font-semibold text-slate-500">Fiche de la prestation</div>
+                      <button type="button"
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-slate-50"
+                        onClick={() => { setEditingLineId(line.id); setDesignationDraft(readableDesignation(line.designation)); }}>
+                        Modifier la désignation
+                      </button>
+                    </div>
                     <div className="inline-flex rounded-xl border border-slate-200 p-1">
                       <button type="button" onClick={() => setViewByLine((old) => ({...old, [line.id]: "preparer"}))}
                         className={`rounded-lg px-3 py-1.5 text-sm ${(viewByLine[line.id] ?? defaultView) !== "produire" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Préparer</button>
@@ -330,12 +373,35 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                         className={`rounded-lg px-3 py-1.5 text-sm ${(viewByLine[line.id] ?? defaultView) === "produire" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Produire</button>
                     </div>
                   </div>
+                  {editingLineId === line.id && (
+                    <form className="space-y-2 rounded-xl border border-blue-100 bg-blue-50/30 p-3"
+                      onSubmit={(event) => { event.preventDefault(); void saveDesignation(line); }}>
+                      <label htmlFor={`designation-${line.id}`} className="block text-xs font-semibold text-slate-700">
+                        Désignation vendue au client
+                      </label>
+                      <textarea id={`designation-${line.id}`} rows={3} autoFocus
+                        value={designationDraft} onChange={(event) => setDesignationDraft(event.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"/>
+                      <p className="text-xs text-slate-500">Les prix et quantités restent inchangés. Seul le texte de cette ligne de devis est modifié.</p>
+                      <div className="flex justify-end gap-2">
+                        <button type="button" onClick={() => setEditingLineId(null)}
+                          className="rounded-lg border px-3 py-2 text-xs">Annuler</button>
+                        <button type="submit" disabled={workingId !== null || !designationDraft.trim()}
+                          className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                          Enregistrer
+                        </button>
+                      </div>
+                    </form>
+                  )}
                   {resourceError && <p className="text-xs text-slate-600">{resourceError}</p>}
                   {!readinessLoaded && <p className="text-xs text-slate-500">Lecture des moyens du chantier…</p>}
                   {linked.map((task) => {
                     const cost = taskCosts.get(task.id);
                     const assigned = assigneesByTask[task.id] ?? (task.intervenant_id ? [task.intervenant_id] : []);
                     const selectedZones = zonesByTask[task.id] ?? (task.zone_id ? [task.zone_id] : []);
+                    const selectedPieceIds = Array.from(new Set(selectedZones.flatMap((id) =>
+                      zones.some((zone) => zone.id === id && zone.zone_type === "piece")
+                        ? [id] : collectDescendantPieceIds(zones, id))));
                     const invalidHistoricalLink = cost?.reason?.startsWith("Ancienne tâche importée") ?? false;
                     const estimate = !invalidHistoricalLink && task.task_template_id && preparation
                       ? estimateTaskTemplatePreparation(task,
@@ -427,16 +493,13 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                               </span>
                               <span aria-hidden="true" className="text-slate-500 group-open:rotate-180">⌄</span>
                             </summary>
-                            <div className="space-y-2 pb-3 pl-7">
-                              {zones.filter((zone) => zone.zone_type === "piece").map((zone) =>
-                                <label key={zone.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                                  <input type="checkbox" disabled={workingId !== null} checked={selectedZones.includes(zone.id)}
-                                    onChange={(e) => void setTaskZones(task, e.target.checked
-                                      ? [...selectedZones, zone.id] : selectedZones.filter((id) => id !== zone.id))} />
-                                  {zonePaths.get(zone.id) ?? zone.nom}
-                                </label>)}
-                              {zones.every((zone) => zone.zone_type !== "piece") &&
-                                <p className="text-xs text-slate-500">Aucune pièce configurée. La localisation n'est pas obligatoire.</p>}
+                            <div className="pb-3 pl-7">
+                              <ChantierLocationTree zones={zones} selectedPieceIds={selectedPieceIds}
+                                disabled={workingId !== null}
+                                onChange={(nextIds) => void setTaskZones(task, nextIds)} />
+                              <a href="#architecture-du-chantier" className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline">
+                                Gérer les bâtiments, étages et pièces du chantier
+                              </a>
                             </div>
                           </details>
 
@@ -444,12 +507,12 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                             <summary className="flex cursor-pointer list-none items-center gap-3 py-3 [&::-webkit-details-marker]:hidden">
                               <span aria-hidden="true" className="text-lg text-slate-400">♙</span>
                               <span className="min-w-0 flex-1">
-                                <span className="block font-semibold text-slate-900">Intervenants et planning</span>
+                                <span className="block font-semibold text-slate-900">Intervenants</span>
                                 <span className="block truncate text-xs text-slate-500">
                                   {assigned.length
                                     ? `${assigned.length} intervenant${assigned.length > 1 ? "s" : ""}`
                                     : "Aucun intervenant"}
-                                  {" · "}{task.date_debut && task.date_fin ? `${task.date_debut} au ${task.date_fin}` : "Dates à définir"}
+                                  {" · Accès à la prestation"}
                                 </span>
                               </span>
                               <span aria-hidden="true" className="text-slate-500 group-open:rotate-180">⌄</span>
@@ -464,19 +527,9 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                                 </label>)}
                                 {intervenants.length === 0 && <span className="text-xs text-slate-500">Aucun intervenant affectable</span>}
                               </div>
-                              <div className="flex flex-wrap gap-3">
-                                <label className="text-xs text-slate-600">Début
-                                  <input key={task.id + "-start-" + (task.date_debut ?? "")} type="date" defaultValue={task.date_debut ?? ""}
-                                    onBlur={(e) => { if (e.target.value !== (task.date_debut ?? "")) void saveTaskField(task, { date_debut: e.target.value || null }); }}
-                                    className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"/>
-                                </label>
-                                <label className="text-xs text-slate-600">Fin
-                                  <input key={task.id + "-end-" + (task.date_fin ?? "")} type="date" defaultValue={task.date_fin ?? ""}
-                                    onBlur={(e) => { if (e.target.value !== (task.date_fin ?? "")) void saveTaskField(task, { date_fin: e.target.value || null }); }}
-                                    className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"/>
-                                </label>
-                              </div>
-                              <p className="text-xs text-slate-500">Affectations et dates enregistrées sur la tâche. La synchronisation avec le planning général reste à vérifier.</p>
+                              <p className="text-xs text-slate-500">
+                                Les affectations donnent accès à cette prestation. Le calendrier se gère dans le planning général.
+                              </p>
                             </div>
                           </details>
 

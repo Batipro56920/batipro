@@ -5578,7 +5578,8 @@ export default function ChantierPage() {
         )}
         {detailSection === "preparation" && id && <ChantierPreparationSection chantierId={id} onTaskOpen={async (taskId) => { await refreshTasksOnly(); setTaskDetailOpenId(taskId); setTaskDetailTab("synthese"); }} />}
         {detailSection === "preparation" && id && (
-          <ChantierLocationSection
+          <div id="architecture-du-chantier" className="scroll-mt-24">
+            <ChantierLocationSection
             chantierId={id}
             view="localisation"
             tasks={tasks.map((task) => ({
@@ -5606,7 +5607,8 @@ export default function ChantierPage() {
               description: consigne.description ?? null,
               zone_id: consigne.zone_id ?? null,
             }))}
-          />
+            />
+          </div>
         )}
         {detailSection === "financier" && (
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
