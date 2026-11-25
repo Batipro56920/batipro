@@ -497,6 +497,9 @@ export default function DesignationsPreparationPanel({ chantierId, devis, tasks,
                               <ChantierLocationTree zones={zones} selectedPieceIds={selectedPieceIds}
                                 disabled={workingId !== null}
                                 onChange={(nextIds) => void setTaskZones(task, nextIds)} />
+                              <a href="#architecture-du-chantier" className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline">
+                                Gérer les bâtiments, étages et pièces du chantier
+                              </a>
                             </div>
                           </details>
 
