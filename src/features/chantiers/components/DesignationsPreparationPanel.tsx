@@ -39,8 +39,8 @@ const eur = (value: number | null) => value === null ? "Non calculé" :
  */
 function readableDesignation(raw: string): string {
   return raw.trim()
-    .replace(/^\\d+(?:\\.\\d+)*\\s+(?=[\\p{L}])/u, "")
-    .replace(/\\s+\\d+(?:[,.]\\d+)?\\s*(?:m²|m2|ml|m³|m3|u|unité(?:s)?|forfait|ens|h)\\s+\\d+(?:[,.]\\d+)?\\s*€(?:\\s+\\d+(?:[,.]\\d+)?\\s*%)?\\s+\\d+(?:[,.]\\d+)?\\s*€\\s*$/iu, "")
+    .replace(/^\d+(?:\.\d+)*\s+(?=[\p{L}])/u, "")
+    .replace(/\s+\d+(?:[,.]\d+)?\s*(?:m²|m2|ml|m³|m3|u|unité(?:s)?|forfait|ens|h)\s+\d+(?:[,.]\d+)?\s*€(?:\s+\d+(?:[,.]\d+)?\s*%)?\s+\d+(?:[,.]\d+)?\s*€\s*$/iu, "")
     .trim();
 }
 
